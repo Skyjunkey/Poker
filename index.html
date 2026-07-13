@@ -85,10 +85,58 @@
   .link.red-link { color: rgba(192,57,43,0.85); }
   .field { display: block; margin-bottom: 0.75rem; }
   .field-label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: rgba(242,239,233,0.7); }
-  .input, select.input, textarea.input {
-    width: 100%; border-radius: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);
-    padding: 0.6rem 0.75rem; color: var(--cream); outline: none; font-family: inherit; font-size: 1rem;
-  }
+.input,
+select.input,
+textarea.input {
+    width: 100%;
+    border-radius: 0.75rem;
+    background: var(--felt-card);
+    border: 1px solid var(--gold);
+    padding: 0.65rem 2.5rem 0.65rem 0.75rem;
+    color: var(--cream);
+    outline: none;
+    font-family: inherit;
+    font-size: 1rem;
+
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+.input:focus,
+select.input:focus,
+textarea.input:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px rgba(212,162,78,.25);
+}
+
+textarea.input {
+    resize: none;
+}
+
+/* Select menu */
+
+select.input {
+    cursor: pointer;
+
+    background-color: var(--felt-card);
+
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--gold) 50%),
+        linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+
+    background-position:
+        calc(100% - 18px) calc(50% - 3px),
+        calc(100% - 12px) calc(50% - 3px);
+
+    background-size: 6px 6px;
+    background-repeat: no-repeat;
+}
+
+select.input option {
+    background: var(--felt-card);
+    color: var(--cream);
+}
   .input:focus { border-color: var(--gold); }
   textarea.input { resize: none; }
   .toggle-group { display: flex; border-radius: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); padding: 0.25rem; }
