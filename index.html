@@ -85,58 +85,10 @@
   .link.red-link { color: rgba(192,57,43,0.85); }
   .field { display: block; margin-bottom: 0.75rem; }
   .field-label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: rgba(242,239,233,0.7); }
-.input,
-select.input,
-textarea.input {
-    width: 100%;
-    border-radius: 0.75rem;
-    background: var(--felt-card);
-    border: 1px solid var(--gold);
-    padding: 0.65rem 2.5rem 0.65rem 0.75rem;
-    color: var(--cream);
-    outline: none;
-    font-family: inherit;
-    font-size: 1rem;
-
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-}
-
-.input:focus,
-select.input:focus,
-textarea.input:focus {
-    border-color: var(--gold);
-    box-shadow: 0 0 0 2px rgba(212,162,78,.25);
-}
-
-textarea.input {
-    resize: none;
-}
-
-/* Select menu */
-
-select.input {
-    cursor: pointer;
-
-    background-color: var(--felt-card);
-
-    background-image:
-        linear-gradient(45deg, transparent 50%, var(--gold) 50%),
-        linear-gradient(135deg, var(--gold) 50%, transparent 50%);
-
-    background-position:
-        calc(100% - 18px) calc(50% - 3px),
-        calc(100% - 12px) calc(50% - 3px);
-
-    background-size: 6px 6px;
-    background-repeat: no-repeat;
-}
-
-select.input option {
-    background: var(--felt-card);
-    color: var(--cream);
-}
+  .input, select.input, textarea.input {
+    width: 100%; border-radius: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1);
+    padding: 0.6rem 0.75rem; color: var(--cream); outline: none; font-family: inherit; font-size: 1rem;
+  }
   .input:focus { border-color: var(--gold); }
   textarea.input { resize: none; }
   .toggle-group { display: flex; border-radius: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); padding: 0.25rem; }
@@ -198,6 +150,7 @@ select.input option {
     modal: null,              // { type, ...payload }
   };
   const confirmDeleteIds = new Set();
+  const confirmRemovePlayerIds = new Set();
 
   // =====================================================================
   // Helpers
@@ -460,7 +413,7 @@ select.input option {
         '<div id="nn-switch" class="switch" onclick="toggleNightBountySwitch()"><div class="knob"></div></div>' +
       '</div>' +
       '<div id="nn-bounty-field" style="display:none">' +
-        '<div class="field"><span class="field-label">סכום בונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="100" /></div>' +
+        '<div class="field"><span class="field-label">סכום בונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="50" /></div>' +
       '</div>' +
       '<button class="btn btn-primary" onclick="createNight()">יצירת ערב</button>';
     return modalShell('ערב פוקר חדש', body);
@@ -599,7 +552,7 @@ select.input option {
       html += '</div>';
     }
 
-  html += '<button class="btn btn-primary" style="margin-bottom:1rem;font-size:16px;font-weight:700" onclick="openModal(\'addPlayer\')">+ הוספת שחקן לערב</button>';
+    html += '<button class="btn" style="border:1px dashed rgba(255,255,255,0.2);color:rgba(242,239,233,0.7);margin-bottom:1rem" onclick="openModal(\'addPlayer\')">+ הוספת שחקן לערב</button>';
 
     if (playerTotals.length === 0) {
       html += '<p class="empty">עדיין אין שחקנים בערב זה</p>';
@@ -647,12 +600,41 @@ select.input option {
     if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה בונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
     html += '</div>';
 
-    html += '<div class="grid-3" style="grid-template-columns:repeat(3,1fr)">' +
-      '<button class="btn-sm" style="background:rgba(212,162,78,0.9);color:var(--felt-dark)" onclick="openModal(\'rebuy\',{sessionPlayerId:\'' + sp.id + '\'})">ריביי</button>' +
-      '<button class="btn-sm" onclick="openModal(\'notes\',{sessionPlayerId:\'' + sp.id + '\'})">הערות</button>' +
-      '<button class="btn-sm" onclick="openModal(\'transactions\',{sessionPlayerId:\'' + sp.id + '\'})">תנועות</button>' +
-    '</div></div>';
+    const confirmingRemove = confirmRemovePlayerIds.has(sp.id);
+    if (confirmingRemove) {
+      html += '<div class="row gap-2">' +
+        '<button class="btn-sm" style="flex:1;background:var(--red);color:var(--cream)" onclick="removePlayerFromNight(\'' + sp.id + '\')">לאשר הסרת שחקן?</button>' +
+        '<button class="btn-sm" style="flex:1" onclick="cancelRemovePlayer(\'' + sp.id + '\')">ביטול</button>' +
+      '</div>';
+    } else {
+      html += '<div class="grid-4">' +
+        '<button class="btn-sm" style="background:rgba(212,162,78,0.9);color:var(--felt-dark)" onclick="openModal(\'rebuy\',{sessionPlayerId:\'' + sp.id + '\'})">ריביי</button>' +
+        '<button class="btn-sm" onclick="openModal(\'notes\',{sessionPlayerId:\'' + sp.id + '\'})">הערות</button>' +
+        '<button class="btn-sm" onclick="openModal(\'transactions\',{sessionPlayerId:\'' + sp.id + '\'})">תנועות</button>' +
+        '<button class="btn-sm" style="color:#e08b80" onclick="confirmRemovePlayer(\'' + sp.id + '\')">הסרה</button>' +
+      '</div>';
+    }
+    html += '</div>';
     return html;
+  }
+
+  function confirmRemovePlayer(id) { confirmRemovePlayerIds.add(id); renderScreen(); }
+  function cancelRemovePlayer(id) { confirmRemovePlayerIds.delete(id); renderScreen(); }
+  async function removePlayerFromNight(id) {
+    confirmRemovePlayerIds.delete(id);
+    const session = state.activeSession;
+    state.sessionPlayers = state.sessionPlayers.filter((sp) => sp.id !== id);
+    state.transactions = state.transactions.filter((t) => t.session_player_id !== id);
+    renderScreen();
+    checkError(await sb.from('session_players').delete().eq('id', id), 'הסרת שחקן מהערב');
+    // Clean up a dangling bounty-prize assignment left pointing at the removed player.
+    if (session && session.bounty_prizes && session.bounty_prizes.some((p) => p.assigned_session_player_id === id)) {
+      const cleaned = session.bounty_prizes.map((p) =>
+        p.assigned_session_player_id === id ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p
+      );
+      session.bounty_prizes = cleaned;
+      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי בונטי');
+    }
   }
 
   // ---- Add player to night ----
