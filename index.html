@@ -1009,52 +1009,86 @@ select.input option {
   // as its own JSON blob on poker_sessions.settlement.
   // =====================================================================
 
-  function settlementSummaryCard(session) {
-    const s = session.settlement;
-    const finalists = s.finalists.map((f) => Object.assign({}, f, {
-      sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
-    })).sort((a, b) => b.gross_payout - a.gross_payout);
-    const medals = ['🥇', '🥈', '🥉'];
-    let html = '<div class="card mb-5">' +
-      '<div class="row-between mb-3"><h2 class="font-semibold gold">התחשבנות סופית</h2>' +
+ function settlementSummaryCard(session) {
+  const s = session.settlement;
+
+  const finalists = s.finalists.map((f) => Object.assign({}, f, {
+    sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
+  })).sort((a, b) => b.gross_payout - a.gross_payout);
+
+  const medals = ['🥇', '🥈', '🥉'];
+
+  let html =
+    '<div class="card mb-5">' +
+      '<div class="row-between mb-3">' +
+        '<h2 class="font-semibold gold">התחשבנות סופית</h2>' +
         '<button class="btn-sm" onclick="openSettlementWizard()">עריכת התחשבנות</button>' +
       '</div>' +
+
       '<div class="card-list mb-3">' +
-        finalists.map((f, i) => '<div class="assign-row">' +
-          '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp ? f.sp.display_name : '') + '</p>' +
-          '<div class="text-xs muted">' +
-            '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.gross_payout) + '</span></div>' +
-            (f.credit_offset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.credit_offset) + '</span></div>' : '') +
-            '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cash_received) + '</span></div>' +
-          '</div>' +
-        '</div>').join('') +
+        finalists.map((f, i) =>
+          '<div class="assign-row">' +
+            '<p class="text-sm font-semibold mb-1">' +
+              medals[i] + ' ' + esc(f.sp ? f.sp.display_name : '') +
+            '</p>' +
+
+            '<div class="text-xs muted">' +
+              '<div class="row-between">' +
+                '<span>זכייה</span>' +
+                '<span class="tabular">' + formatMoney(f.gross_payout) + '</span>' +
+              '</div>' +
+
+              (f.credit_offset > 0
+                ? '<div class="row-between">' +
+                    '<span>קיזוז אשראי</span>' +
+                    '<span class="tabular">' + formatMoney(f.credit_offset) + '</span>' +
+                  '</div>'
+                : '') +
+
+              '<div class="row-between">' +
+                '<span>מזומן שקיבל</span>' +
+                '<span class="tabular">' + formatMoney(f.cash_received) + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        ).join('') +
       '</div>' +
+
       '<p class="text-sm font-semibold mb-2">העברות</p>';
-    if (s.transfers.length === 0) {
-      html += '<p class="text-sm muted">לא נדרשו העברות</p>';
-    } else {
+
+  if (s.transfers.length === 0) {
+    html += '<p class="text-sm muted">לא נדרשו העברות</p>';
   } else {
-  html += '<div class="card-list">' + s.transfers.map((t) => {
-    const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
-    const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
+    html += '<div class="card-list">' +
+      s.transfers.map((t) => {
+        const from = state.sessionPlayers.find(
+          (sp) => sp.id === t.from_session_player_id
+        );
 
-    return '<div class="row-between text-sm">' +
-      '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
-        '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
-        '<span>→</span>' +
-        '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
-      '</span>' +
-      '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+        const to = state.sessionPlayers.find(
+          (sp) => sp.id === t.to_session_player_id
+        );
+
+        return (
+          '<div class="row-between text-sm">' +
+            '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
+              '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
+              '<span>→</span>' +
+              '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
+            '</span>' +
+
+            '<span class="tabular gold font-semibold">' +
+              formatMoney(t.amount) +
+            '</span>' +
+          '</div>'
+        );
+      }).join('') +
     '</div>';
-  }).join('') + '</div>';
-}
+  }
 
-html += '</div>';
-return html;
-}
+  html += '</div>';
 
-html += '</div>';
-return html;
+  return html;
 }
 
   function openSettlementWizard() {
