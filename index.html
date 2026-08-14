@@ -151,6 +151,7 @@
   };
   const confirmDeleteIds = new Set();
   const confirmRemovePlayerIds = new Set();
+  let settlementDraft = null; // multi-step "close night" wizard state, see settlement section below
 
   // =====================================================================
   // Helpers
@@ -222,6 +223,21 @@
     const buckets = new Array(n).fill(0);
     for (let i = 0; i < units; i++) buckets[Math.floor(Math.random() * n)] += 1;
     return buckets.map((u) => u * 50);
+  }
+
+  // ---- Settlement-specific helpers (game pool only — bounty is out of scope here) ----
+  function computeGameCashCredit(allTx) {
+    const tx = activeTx(allTx);
+    const gameBuy = (t) => ['initial_buy_in', 'rebuy'].includes(t.transaction_type) && t.pool_type === 'game';
+    const cash = sumBy(tx, (t) => gameBuy(t) && t.payment_method === 'cash');
+    const credit = sumBy(tx, (t) => gameBuy(t) && t.payment_method === 'credit_card');
+    return { cash, credit };
+  }
+  function playerGameCredit(sessionPlayerId, allTx) {
+    return sumBy(activeTx(allTx), (t) =>
+      t.session_player_id === sessionPlayerId && t.pool_type === 'game' &&
+      ['initial_buy_in', 'rebuy'].includes(t.transaction_type) && t.payment_method === 'credit_card'
+    );
   }
 
   // =====================================================================
@@ -300,6 +316,7 @@
   }
   function closeModal() {
     state.modal = null;
+    settlementDraft = null;
     document.getElementById('modalRoot').innerHTML = '';
   }
   function renderModal() {
@@ -330,6 +347,7 @@
       case 'transactions': return transactionsModal(m.sessionPlayerId);
       case 'editBuy': return editBuyModal(m.transactionId, m.index);
       case 'bountyPrizes': return bountyPrizesModal();
+      case 'settlement': return settlementModalBody();
       default: return '';
     }
   }
@@ -382,7 +400,7 @@
       '<div class="card clickable" onclick="' + (confirming ? '' : openFn) + '">' +
         '<div class="row-between">' +
           '<p class="font-semibold">' + esc(s.name) + '</p>' +
-          (s.is_bounty_event ? '<span class="badge badge-red">באונטי</span>' : '') +
+          (s.is_bounty_event ? '<span class="badge badge-red">בונטי</span>' : '') +
         '</div>' +
         '<div class="row-between mt-2">' +
           '<p class="text-sm muted">' + fmtDate(s.session_date) + '</p>' +
@@ -409,11 +427,11 @@
       '<div class="field"><span class="field-label">קנייה ברירת מחדל (₪)</span><input id="nn-buyin" type="number" inputmode="decimal" class="input" value="100" /></div>' +
       '<div class="field"><span class="field-label">הערות</span><textarea id="nn-notes" class="input" rows="2" placeholder="הערות (אופציונלי)"></textarea></div>' +
       '<div class="row-between" style="background:rgba(0,0,0,0.2);border-radius:0.75rem;padding:0.6rem 0.75rem;margin-bottom:0.75rem">' +
-        '<span class="text-sm">ערב באונטי?</span>' +
+        '<span class="text-sm">ערב בונטי?</span>' +
         '<div id="nn-switch" class="switch" onclick="toggleNightBountySwitch()"><div class="knob"></div></div>' +
       '</div>' +
       '<div id="nn-bounty-field" style="display:none">' +
-        '<div class="field"><span class="field-label">סכום באונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="50" /></div>' +
+        '<div class="field"><span class="field-label">סכום בונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="50" /></div>' +
       '</div>' +
       '<button class="btn btn-primary" onclick="createNight()">יצירת ערב</button>';
     return modalShell('ערב פוקר חדש', body);
@@ -516,23 +534,29 @@
       '<div class="grid-3 mb-5">' +
         statChip('שחקנים', String(totals.playerCount)) +
         gamePoolChip(totals) +
-        statChip('קופת באונטי', formatMoney(totals.bountyPool)) +
+        statChip('קופת בונטי', formatMoney(totals.bountyPool)) +
         statChip('מזומן', formatMoney(totals.totalCash)) +
         statChip('אשראי', formatMoney(totals.totalCredit)) +
         statChip('סה״כ', formatMoney(totals.grandTotal), true) +
       '</div>';
 
+    if (session.status === 'completed' && session.settlement) {
+      html += settlementSummaryCard(session);
+    } else {
+      html += '<button class="btn btn-primary mb-5" onclick="openSettlementWizard()">סגירת ערב והתחשבנות</button>';
+    }
+
     if (session.is_bounty_event) {
       html += '<div class="card mb-5" style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3)">' +
         '<div class="row-between mb-2">' +
-          '<h2 class="font-semibold red">קופת באונטי</h2>' +
+          '<h2 class="font-semibold red">קופת בונטי</h2>' +
           '<button class="btn-sm" ' + (state.sessionPlayers.length === 0 ? 'disabled' : '') + ' onclick="openModal(\'bountyPrizes\')">' +
             (prizes.length > 0 ? 'ניהול פרסים' : 'הגדרת פרסים') +
           '</button>' +
         '</div>' +
         '<div class="' + (prizes.length > 0 ? 'grid-4' : 'grid-3') + ' text-sm muted mb-1">' +
           '<div><p class="text-xs muted-40">שחקנים</p><p class="tabular">' + totals.playerCount + '</p></div>' +
-          '<div><p class="text-xs muted-40">באונטי לשחקן</p><p class="tabular">' + formatMoney(session.bounty_amount) + '</p></div>' +
+          '<div><p class="text-xs muted-40">בונטי לשחקן</p><p class="tabular">' + formatMoney(session.bounty_amount) + '</p></div>' +
           '<div><p class="text-xs muted-40">סה"כ קופה</p><p class="tabular">' + formatMoney(totals.bountyPool) + '</p></div>' +
           (prizes.length > 0 ? '<div><p class="text-xs muted-40">יתרת קופה</p><p class="tabular font-semibold gold">' + formatMoney(bountyRemaining) + '</p></div>' : '') +
         '</div>';
@@ -546,7 +570,7 @@
               '<span class="' + (winner ? 'gold font-semibold' : 'muted-40') + '">' + (winner ? esc(winner.display_name) : 'טרם חולק') + '</span>' +
             '</div>';
           }).join('') +
-          (prizesSum !== totals.bountyPool ? '<p class="text-xs red pt-1">⚠ סך הפרסים (' + formatMoney(prizesSum) + ') אינו שווה לקופת הבאונטי (' + formatMoney(totals.bountyPool) + ')</p>' : '') +
+          (prizesSum !== totals.bountyPool ? '<p class="text-xs red pt-1">⚠ סך הפרסים (' + formatMoney(prizesSum) + ') אינו שווה לקופת הבונטי (' + formatMoney(totals.bountyPool) + ')</p>' : '') +
         '</div>';
       }
       html += '</div>';
@@ -595,9 +619,9 @@
     });
 
     html += '<div class="row-between divider-top pt-1 mt-1 font-semibold" style="color:var(--cream)"><span>סה״כ היום</span><span class="tabular">' + formatMoney(t.gameContribution) + '</span></div>';
-    if (isBounty) html += '<div class="row-between pt-1"><span>באונטי שולם</span><span class="tabular">' + formatMoney(t.bountyContribution) + '</span></div>';
+    if (isBounty) html += '<div class="row-between pt-1"><span>בונטי שולם</span><span class="tabular">' + formatMoney(t.bountyContribution) + '</span></div>';
     if (t.gamePayout > 0) html += '<div class="row-between gold"><span>קאשאאוט</span><span class="tabular">' + formatMoney(t.gamePayout) + '</span></div>';
-    if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה באונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
+    if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה בונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
     html += '</div>';
 
     const confirmingRemove = confirmRemovePlayerIds.has(sp.id);
@@ -633,7 +657,7 @@
         p.assigned_session_player_id === id ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p
       );
       session.bounty_prizes = cleaned;
-      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי באונטי');
+      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי בונטי');
     }
   }
 
@@ -659,8 +683,8 @@
         '</div><input type="hidden" id="ap-buyin-method" value="cash" />' +
       '</div>' +
       (session.is_bounty_event ?
-        '<div class="field"><span class="field-label">סכום באונטי (₪)</span><input id="ap-bounty" type="number" inputmode="decimal" class="input" value="' + session.bounty_amount + '" /></div>' +
-        '<div class="field"><span class="field-label">אמצעי תשלום לבאונטי</span>' +
+        '<div class="field"><span class="field-label">סכום בונטי (₪)</span><input id="ap-bounty" type="number" inputmode="decimal" class="input" value="' + session.bounty_amount + '" /></div>' +
+        '<div class="field"><span class="field-label">אמצעי תשלום לבונטי</span>' +
           '<div class="toggle-group">' +
             '<button class="toggle-btn active" data-method="cash" onclick="setToggle(this,\'ap-bounty-method\')">מזומן</button>' +
             '<button class="toggle-btn" data-method="credit_card" onclick="setToggle(this,\'ap-bounty-method\')">אשראי</button>' +
@@ -756,8 +780,8 @@
 
   // ---- Transactions list (void/restore) ----
   const TYPE_LABELS = {
-    initial_buy_in: 'קנייה ראשונית', rebuy: 'ריביי', bounty_contribution: 'תשלום באונטי',
-    game_payout: 'קאשאאוט', bounty_payout: 'זכיית באונטי', adjustment: 'התאמה',
+    initial_buy_in: 'קנייה ראשונית', rebuy: 'ריביי', bounty_contribution: 'תשלום בונטי',
+    game_payout: 'קאשאאוט', bounty_payout: 'זכיית בונטי', adjustment: 'התאמה',
   };
   function transactionsModal(sessionPlayerId) {
     const sp = state.sessionPlayers.find((s) => s.id === sessionPlayerId);
@@ -768,7 +792,7 @@
         '<div class="assign-row" style="' + (t.is_voided ? 'opacity:0.4' : '') + '">' +
           '<div class="row-between">' +
             '<div><p class="text-sm font-semibold">' + (TYPE_LABELS[t.transaction_type] || t.transaction_type) + (t.is_voided ? ' <span class="red text-xs">(מבוטל)</span>' : '') + '</p>' +
-              '<p class="text-xs muted">' + fmtDateTime(t.created_at) + ' · ' + (t.payment_method === 'cash' ? 'מזומן' : 'אשראי') + ' · ' + (t.pool_type === 'game' ? 'קופת משחק' : 'קופת באונטי') + '</p>' +
+              '<p class="text-xs muted">' + fmtDateTime(t.created_at) + ' · ' + (t.payment_method === 'cash' ? 'מזומן' : 'אשראי') + ' · ' + (t.pool_type === 'game' ? 'קופת משחק' : 'קופת בונטי') + '</p>' +
               (t.notes ? '<p class="text-xs muted">' + esc(t.notes) + '</p>' : '') +
             '</div>' +
             '<div class="row gap-2"><span class="tabular font-semibold">' + formatMoney(t.amount) + '</span>' +
@@ -819,14 +843,14 @@
       const fallback = n > 0 ? Math.round(totals.bountyPool / n) : 0;
       const draft = Array.from({ length: n }, () => fallback || session.bounty_amount);
       const body =
-        '<p class="text-sm muted mb-3">' + n + ' שחקנים → ' + n + ' פרסים להגדרה · קופת באונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · יתרת חלוקה: <span id="bp-remaining" class="font-semibold">' + formatMoney(totals.bountyPool - draft.reduce((a, b) => a + b, 0)) + '</span></p>' +
+        '<p class="text-sm muted mb-3">' + n + ' שחקנים → ' + n + ' פרסים להגדרה · קופת בונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · יתרת חלוקה: <span id="bp-remaining" class="font-semibold">' + formatMoney(totals.bountyPool - draft.reduce((a, b) => a + b, 0)) + '</span></p>' +
         '<button class="btn btn-secondary mb-3" style="width:100%" onclick="autoDistributeClick(' + totals.bountyPool + ')">🎲 חלוקה אוטומטית</button>' +
         '<div class="card-list mb-3" style="max-height:18rem;overflow-y:auto">' +
           draft.map((a, i) => '<div class="row gap-2"><span class="text-sm muted" style="width:4rem;flex-shrink:0">פרס ' + (i + 1) + '</span><input class="input bp-draft-input" data-idx="' + i + '" type="number" inputmode="decimal" value="' + a + '" oninput="updateBpRemaining(' + totals.bountyPool + ')" /></div>').join('') +
         '</div>' +
         '<p id="bp-overage-msg" class="text-xs red mb-3" style="display:none"></p>' +
         '<button id="bp-create-btn" class="btn btn-primary" onclick="createPrizes()">יצירת פרסים</button>';
-      return modalShell('פרסי באונטי', body);
+      return modalShell('פרסי בונטי', body);
     }
 
     const assignedPlayerIds = new Set(prizes.map((p) => p.assigned_session_player_id).filter(Boolean));
@@ -834,7 +858,7 @@
     const sum = prizes.reduce((a, p) => a + Number(p.amount), 0);
     const isEqual = Math.round(sum * 100) / 100 === Math.round(totals.bountyPool * 100) / 100;
 
-    let body = '<p class="text-sm muted mb-3">קופת באונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · הוגדר: <span class="font-semibold">' + formatMoney(sum) + '</span></p>' +
+    let body = '<p class="text-sm muted mb-3">קופת בונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · הוגדר: <span class="font-semibold">' + formatMoney(sum) + '</span></p>' +
       '<div class="card-list mb-3" style="max-height:24rem;overflow-y:auto">';
 
     body += prizes.map((p, i) => {
@@ -852,9 +876,9 @@
     }).join('');
 
     body += '</div>';
-    if (!isEqual) body += '<p class="text-xs red mb-3">סך הפרסים (' + formatMoney(sum) + ') אינו שווה לקופת הבאונטי (' + formatMoney(totals.bountyPool) + ')</p>';
+    if (!isEqual) body += '<p class="text-xs red mb-3">סך הפרסים (' + formatMoney(sum) + ') אינו שווה לקופת הבונטי (' + formatMoney(totals.bountyPool) + ')</p>';
     body += '<button class="link" style="width:100%;text-align:center;padding:0.25rem" onclick="resetPrizes()">איפוס והגדרה מחדש של כל הפרסים</button>';
-    return modalShell('פרסי באונטי', body);
+    return modalShell('פרסי בונטי', body);
   }
 
   function updateBpRemaining(pool) {
@@ -869,7 +893,7 @@
     const btn = document.getElementById('bp-create-btn');
     if (remaining < 0) {
       msg.style.display = 'block';
-      msg.textContent = 'חריגה מקופת הבאונטי — יש להקטין את הפרסים ב-' + formatMoney(-remaining) + ' כדי לשמור';
+      msg.textContent = 'חריגה מקופת הבונטי — יש להקטין את הפרסים ב-' + formatMoney(-remaining) + ' כדי לשמור';
       btn.disabled = true;
     } else {
       msg.style.display = 'none';
@@ -930,7 +954,7 @@
     const session = state.activeSession;
     const prize = (session.bounty_prizes || []).find((p) => p.id === prizeId);
     if (prize && prize.payout_transaction_id) {
-      checkError(await sb.from('transactions').update({ is_voided: true }).eq('id', prize.payout_transaction_id), 'ביטול תשלום באונטי');
+      checkError(await sb.from('transactions').update({ is_voided: true }).eq('id', prize.payout_transaction_id), 'ביטול תשלום בונטי');
     }
     const nextPrizes = session.bounty_prizes.map((p) => p.id === prizeId ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p);
     checkError(await sb.from('poker_sessions').update({ bounty_prizes: nextPrizes }).eq('id', session.id), 'ביטול שיוך פרס');
@@ -942,12 +966,380 @@
     const session = state.activeSession;
     const hadAssigned = (session.bounty_prizes || []).some((p) => p.assigned_session_player_id);
     if (hadAssigned) {
-      checkError(await sb.from('transactions').update({ is_voided: true }).eq('session_id', session.id).eq('transaction_type', 'bounty_payout'), 'איפוס תשלומי באונטי');
+      checkError(await sb.from('transactions').update({ is_voided: true }).eq('session_id', session.id).eq('transaction_type', 'bounty_payout'), 'איפוס תשלומי בונטי');
     }
     checkError(await sb.from('poker_sessions').update({ bounty_prizes: [] }).eq('id', session.id), 'איפוס פרסים');
     state.activeSession.bounty_prizes = [];
     state.transactions = await fetchTransactions(session.id);
     renderModal();
+  }
+
+  // =====================================================================
+  // Night Settlement ("סגירת ערב והתחשבנות")
+  // Completely separate from the buy-in/rebuy ledger: never touches, voids,
+  // or reads into those totals other than to display them read-only. Stored
+  // as its own JSON blob on poker_sessions.settlement.
+  // =====================================================================
+
+  function settlementSummaryCard(session) {
+    const s = session.settlement;
+    const finalists = s.finalists.map((f) => Object.assign({}, f, {
+      sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
+    })).sort((a, b) => b.gross_payout - a.gross_payout);
+    const medals = ['🥇', '🥈', '🥉'];
+    let html = '<div class="card mb-5">' +
+      '<div class="row-between mb-3"><h2 class="font-semibold gold">התחשבנות סופית</h2>' +
+        '<button class="btn-sm" onclick="openSettlementWizard()">עריכת התחשבנות</button>' +
+      '</div>' +
+      '<div class="card-list mb-3">' +
+        finalists.map((f, i) => '<div class="assign-row">' +
+          '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp ? f.sp.display_name : '') + '</p>' +
+          '<div class="text-xs muted">' +
+            '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.gross_payout) + '</span></div>' +
+            (f.credit_offset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.credit_offset) + '</span></div>' : '') +
+            '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cash_received) + '</span></div>' +
+          '</div>' +
+        '</div>').join('') +
+      '</div>' +
+      '<p class="text-sm font-semibold mb-2">העברות</p>';
+    if (s.transfers.length === 0) {
+      html += '<p class="text-sm muted">לא נדרשו העברות</p>';
+    } else {
+      html += '<div class="card-list">' + s.transfers.map((t) => {
+        const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
+        const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
+        return '<div class="row-between text-sm"><span>' + esc(from ? from.display_name : '') + ' → ' + esc(to ? to.display_name : '') + '</span><span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function openSettlementWizard() {
+    const session = state.activeSession;
+    const existing = session.settlement;
+    if (existing) {
+      settlementDraft = { step: 1, finalistIds: existing.finalists.map((f) => f.session_player_id), payouts: {}, cashReceived: {} };
+      existing.finalists.forEach((f) => {
+        settlementDraft.payouts[f.session_player_id] = f.gross_payout;
+        settlementDraft.cashReceived[f.session_player_id] = f.cash_received;
+      });
+    } else {
+      settlementDraft = { step: 1, finalistIds: [], payouts: {}, cashReceived: {} };
+    }
+    state.modal = { type: 'settlement' };
+    renderModal();
+  }
+
+  function settlementModalBody() {
+    if (!settlementDraft) return '';
+    if (settlementDraft.step === 1) return settlementStep1();
+    if (settlementDraft.step === 2) return settlementStep2();
+    if (settlementDraft.step === 3) return settlementStep3();
+    return settlementStep4();
+  }
+
+  function goSettlementStep(step) {
+    settlementDraft.step = step;
+    renderModal();
+    if (step === 2) {
+      const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+      updateSettlementPayoutSum(totals.gamePool);
+    }
+    if (step === 3) {
+      const gc = computeGameCashCredit(state.transactions);
+      updateSettlementCashSum(gc.cash);
+    }
+  }
+
+  // ---- Step 1: choose exactly 3 finalists ----
+  function settlementStep1() {
+    const body =
+      '<p class="text-sm muted mb-3">בחרו את 3 השחקנים האחרונים שנשארו במשחק (נבחרו ' + settlementDraft.finalistIds.length + ' / 3)</p>' +
+      '<div class="card-list mb-4">' +
+        state.sessionPlayers.map((sp) => {
+          const checked = settlementDraft.finalistIds.includes(sp.id);
+          return '<div class="assign-row row-between clickable" style="' + (checked ? 'border:1px solid var(--gold)' : '') + '" onclick="toggleFinalist(\'' + sp.id + '\')">' +
+            '<span>' + esc(sp.display_name) + '</span><span>' + (checked ? '✅' : '') + '</span>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+      '<button class="btn btn-primary" ' + (settlementDraft.finalistIds.length === 3 ? '' : 'disabled') + ' onclick="goSettlementStep(2)">המשך</button>';
+    return modalShell('סגירת ערב - בחירת 3 אחרונים', body);
+  }
+  function toggleFinalist(id) {
+    const idx = settlementDraft.finalistIds.indexOf(id);
+    if (idx >= 0) settlementDraft.finalistIds.splice(idx, 1);
+    else if (settlementDraft.finalistIds.length < 3) settlementDraft.finalistIds.push(id);
+    renderModal();
+  }
+
+  // ---- Step 2: gross payouts, must sum to the main pot exactly ----
+  function settlementStep2() {
+    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+    const mainPot = totals.gamePool;
+    const body =
+      '<p class="text-sm muted mb-3">קופה ראשית: <span class="gold font-semibold">' + formatMoney(mainPot) + '</span> (בונטי לא נכלל)</p>' +
+      '<div class="card-list mb-3">' +
+        settlementDraft.finalistIds.map((id) => {
+          const sp = state.sessionPlayers.find((s) => s.id === id);
+          const val = settlementDraft.payouts[id] != null ? settlementDraft.payouts[id] : '';
+          return '<div class="row gap-2"><span class="text-sm" style="width:6rem;flex-shrink:0">' + esc(sp.display_name) + '</span>' +
+            '<input class="input settlement-payout-input" data-id="' + id + '" type="number" inputmode="decimal" value="' + val + '" oninput="updateSettlementPayoutSum(' + mainPot + ')" /></div>';
+        }).join('') +
+      '</div>' +
+      '<p class="text-sm mb-3">חולק: <span id="settlement-payout-sum" class="tabular font-semibold">' + formatMoney(0) + '</span> / ' + formatMoney(mainPot) + '</p>' +
+      '<div class="row gap-2">' +
+        '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(1)">חזרה</button>' +
+        '<button id="settlement-step2-next" class="btn btn-primary" style="flex:1" disabled onclick="captureSettlementPayouts(' + mainPot + ')">המשך</button>' +
+      '</div>';
+    return modalShell('סגירת ערב - הזנת זכיות', body);
+  }
+  function updateSettlementPayoutSum(mainPot) {
+    let sum = 0;
+    document.querySelectorAll('.settlement-payout-input').forEach((inp) => { sum += Number(inp.value) || 0; });
+    const equal = Math.round(sum * 100) / 100 === Math.round(mainPot * 100) / 100;
+    const el = document.getElementById('settlement-payout-sum');
+    if (el) { el.textContent = formatMoney(sum); el.className = 'tabular font-semibold ' + (equal ? 'gold' : 'red'); }
+    const btn = document.getElementById('settlement-step2-next');
+    if (btn) btn.disabled = !equal;
+  }
+  function captureSettlementPayouts(mainPot) {
+    let sum = 0;
+    document.querySelectorAll('.settlement-payout-input').forEach((inp) => {
+      const v = Number(inp.value) || 0;
+      settlementDraft.payouts[inp.dataset.id] = v;
+      sum += v;
+    });
+    if (Math.round(sum * 100) / 100 !== Math.round(mainPot * 100) / 100) {
+      alert('סך החלוקה חייב להיות שווה בדיוק לקופה הראשית');
+      return;
+    }
+    goSettlementStep(3);
+  }
+
+  // ---- Step 3: physical cash distribution (credit offset applied automatically first) ----
+  function settlementStep3() {
+    const gc = computeGameCashCredit(state.transactions);
+    let cashLeft = gc.cash;
+    const calc = settlementDraft.finalistIds.map((id) => {
+      const sp = state.sessionPlayers.find((s) => s.id === id);
+      const grossPayout = Number(settlementDraft.payouts[id]) || 0;
+      const credit = playerGameCredit(id, state.transactions);
+      const creditOffset = Math.min(credit, grossPayout);
+      const remainingPayout = grossPayout - creditOffset;
+      return { sp, grossPayout, credit, creditOffset, remainingPayout };
+    });
+    calc.forEach((c) => {
+      if (settlementDraft.cashReceived[c.sp.id] == null) {
+        const give = Math.max(0, Math.min(c.remainingPayout, cashLeft));
+        settlementDraft.cashReceived[c.sp.id] = give;
+        cashLeft -= give;
+      }
+    });
+
+    const body =
+      '<p class="text-sm muted mb-3">מזומן בקופה: <span class="gold font-semibold">' + formatMoney(gc.cash) + '</span></p>' +
+      '<div class="card-list mb-3">' +
+        calc.map((c) =>
+          '<div class="assign-row">' +
+            '<p class="text-sm font-semibold mb-1">' + esc(c.sp.display_name) + '</p>' +
+            '<p class="text-xs muted mb-2">זכייה: ' + formatMoney(c.grossPayout) +
+              (c.creditOffset > 0 ? ' · קיזוז אשראי: ' + formatMoney(c.creditOffset) : '') +
+              ' · לתשלום: ' + formatMoney(c.remainingPayout) + '</p>' +
+            '<div class="row gap-2"><span class="text-sm" style="width:6rem;flex-shrink:0">מזומן שיקבל</span>' +
+            '<input class="input settlement-cash-input" data-id="' + c.sp.id + '" type="number" inputmode="decimal" value="' + settlementDraft.cashReceived[c.sp.id] + '" oninput="updateSettlementCashSum(' + gc.cash + ')" /></div>' +
+          '</div>'
+        ).join('') +
+      '</div>' +
+      '<p class="text-sm mb-1">מזומן שחולק: <span id="settlement-cash-sum" class="tabular font-semibold">' + formatMoney(0) + '</span> / ' + formatMoney(gc.cash) + '</p>' +
+      '<p id="settlement-cash-error" class="text-xs red mb-3" style="display:none">סך המזומן שחולק לא יכול לעלות על המזומן שבקופה</p>' +
+      '<div class="row gap-2">' +
+        '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(2)">חזרה</button>' +
+        '<button id="settlement-step3-next" class="btn btn-primary" style="flex:1" onclick="captureSettlementCash(' + gc.cash + ')">המשך</button>' +
+      '</div>';
+    return modalShell('סגירת ערב - חלוקת מזומן', body);
+  }
+  function updateSettlementCashSum(cashPool) {
+    let sum = 0;
+    document.querySelectorAll('.settlement-cash-input').forEach((inp) => { sum += Number(inp.value) || 0; });
+    const over = sum > cashPool + 0.005;
+    const el = document.getElementById('settlement-cash-sum');
+    if (el) { el.textContent = formatMoney(sum); el.className = 'tabular font-semibold ' + (over ? 'red' : 'gold'); }
+    const err = document.getElementById('settlement-cash-error');
+    if (err) err.style.display = over ? 'block' : 'none';
+    const btn = document.getElementById('settlement-step3-next');
+    if (btn) btn.disabled = over;
+  }
+  function captureSettlementCash(cashPool) {
+    let sum = 0;
+    document.querySelectorAll('.settlement-cash-input').forEach((inp) => {
+      const v = Number(inp.value) || 0;
+      settlementDraft.cashReceived[inp.dataset.id] = v;
+      sum += v;
+    });
+    if (sum > cashPool + 0.005) {
+      alert('סך המזומן שחולק לא יכול לעלות על המזומן שבקופה');
+      return;
+    }
+    goSettlementStep(4);
+  }
+
+  // ---- Pure calc: credit offsets, outstanding credit, and a low-transfer-count match ----
+  function computeSettlementCalc(draft) {
+    const finalists = draft.finalistIds.map((id) => {
+      const sp = state.sessionPlayers.find((s) => s.id === id);
+      const grossPayout = Number(draft.payouts[id]) || 0;
+      const credit = playerGameCredit(id, state.transactions);
+      const creditOffset = Math.min(credit, grossPayout);
+      const remainingPayout = grossPayout - creditOffset;
+      const cashReceived = Math.max(0, Math.min(Number(draft.cashReceived[id]) || 0, remainingPayout));
+      const stillNeeds = Math.round((remainingPayout - cashReceived) * 100) / 100;
+      const remainingCreditDebt = Math.round((credit - creditOffset) * 100) / 100;
+      return { sp, grossPayout, credit, creditOffset, remainingPayout, cashReceived, stillNeeds, remainingCreditDebt };
+    });
+
+    const debtors = [];
+    state.sessionPlayers.forEach((sp) => {
+      if (draft.finalistIds.includes(sp.id)) return;
+      const credit = playerGameCredit(sp.id, state.transactions);
+      if (credit > 0.004) debtors.push({ sp, amount: credit });
+    });
+    finalists.forEach((f) => { if (f.remainingCreditDebt > 0.004) debtors.push({ sp: f.sp, amount: f.remainingCreditDebt }); });
+
+    const creditors = finalists.filter((f) => f.stillNeeds > 0.004).map((f) => ({ sp: f.sp, amount: f.stillNeeds }));
+
+    const debtorsCopy = debtors.map((d) => Object.assign({}, d));
+    const creditorsCopy = creditors.map((c) => Object.assign({}, c));
+    debtorsCopy.sort((a, b) => b.amount - a.amount);
+    creditorsCopy.sort((a, b) => b.amount - a.amount);
+    const transfers = [];
+    let i = 0, j = 0;
+    while (i < debtorsCopy.length && j < creditorsCopy.length) {
+      const amt = Math.min(debtorsCopy[i].amount, creditorsCopy[j].amount);
+      if (amt > 0.004) transfers.push({ from: debtorsCopy[i].sp, to: creditorsCopy[j].sp, amount: Math.round(amt * 100) / 100 });
+      debtorsCopy[i].amount -= amt;
+      creditorsCopy[j].amount -= amt;
+      if (debtorsCopy[i].amount <= 0.004) i++;
+      if (creditorsCopy[j].amount <= 0.004) j++;
+    }
+    return { finalists, debtors, creditors, transfers };
+  }
+
+  // ---- Step 4: summary, WhatsApp copy, save ----
+  function settlementStep4() {
+    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+    const gc = computeGameCashCredit(state.transactions);
+    const calc = computeSettlementCalc(settlementDraft);
+    const medals = ['🥇', '🥈', '🥉'];
+    const sortedFinalists = calc.finalists.slice().sort((a, b) => b.grossPayout - a.grossPayout);
+
+    let body = '<div class="card mb-3">' +
+      '<p class="font-semibold mb-2">קופה מקורית</p>' +
+      '<div class="text-sm muted">' +
+        '<div class="row-between"><span>קופה ראשית</span><span class="tabular">' + formatMoney(totals.gamePool) + '</span></div>' +
+        '<div class="row-between"><span>מזומן</span><span class="tabular">' + formatMoney(gc.cash) + '</span></div>' +
+        '<div class="row-between"><span>אשראי</span><span class="tabular">' + formatMoney(gc.credit) + '</span></div>' +
+      '</div></div>';
+
+    body += '<div class="card mb-3"><p class="font-semibold mb-2">שלושת האחרונים</p><div class="card-list">' +
+      sortedFinalists.map((f, i) =>
+        '<div class="assign-row">' +
+          '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp.display_name) + '</p>' +
+          '<div class="text-xs muted">' +
+            '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.grossPayout) + '</span></div>' +
+            (f.creditOffset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.creditOffset) + '</span></div>' : '') +
+            '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cashReceived) + '</span></div>' +
+            (f.stillNeeds > 0 ? '<div class="row-between"><span>יקבל בהעברות</span><span class="tabular">' + formatMoney(f.stillNeeds) + '</span></div>' : '') +
+          '</div>' +
+        '</div>'
+      ).join('') + '</div></div>';
+
+    body += '<div class="card mb-3"><p class="font-semibold mb-2">העברות</p>';
+    if (calc.transfers.length === 0) {
+      body += '<p class="text-sm muted">אין צורך בהעברות</p>';
+    } else {
+      body += '<div class="card-list">' + calc.transfers.map((t) =>
+        '<div class="row-between text-sm"><span>' + esc(t.from.display_name) + ' → ' + esc(t.to.display_name) + '</span><span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span></div>'
+      ).join('') + '</div>';
+    }
+    body += '</div>';
+
+    body += '<button class="btn btn-secondary mb-3" onclick="copySettlementToWhatsapp()">📋 העתק סיכום לוואטסאפ</button>' +
+      '<div class="row gap-2">' +
+        '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
+        '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
+      '</div>';
+    return modalShell('סגירת ערב - סיכום', body);
+  }
+
+  function copySettlementToWhatsapp() {
+    const session = state.activeSession;
+    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+    const gc = computeGameCashCredit(state.transactions);
+    const calc = computeSettlementCalc(settlementDraft);
+    const medals = ['🥇', '🥈', '🥉'];
+    const sortedFinalists = calc.finalists.slice().sort((a, b) => b.grossPayout - a.grossPayout);
+
+    let text = 'סיכום ערב פוקר';
+    if (session && session.name) text += ' - ' + session.name;
+    text += '\n\n';
+    text += 'קופה: ' + formatMoney(totals.gamePool) + '\n';
+    text += 'מזומן: ' + formatMoney(gc.cash) + '\n';
+    text += 'אשראי: ' + formatMoney(gc.credit) + '\n\n';
+    text += 'שלושת האחרונים\n';
+    sortedFinalists.forEach((f, i) => { text += medals[i] + ' ' + f.sp.display_name + ' — ' + formatMoney(f.grossPayout) + '\n'; });
+    text += '\nהעברות\n';
+    if (calc.transfers.length === 0) text += 'אין צורך בהעברות\n';
+    else calc.transfers.forEach((t) => { text += t.from.display_name + ' → ' + t.to.display_name + ': ' + formatMoney(t.amount) + '\n'; });
+
+    copyTextToClipboard(text);
+  }
+  function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => alert('הסיכום הועתק! אפשר להדביק בוואטסאפ.'),
+        () => fallbackCopy(text)
+      );
+    } else {
+      fallbackCopy(text);
+    }
+  }
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      alert('הסיכום הועתק! אפשר להדביק בוואטסאפ.');
+    } catch (e) {
+      prompt('העתיקו את הטקסט ידנית:', text);
+    }
+    document.body.removeChild(ta);
+  }
+
+  async function saveSettlement() {
+    const session = state.activeSession;
+    const calc = computeSettlementCalc(settlementDraft);
+    const settlement = {
+      finalists: calc.finalists.map((f) => ({
+        session_player_id: f.sp.id, gross_payout: f.grossPayout, credit_offset: f.creditOffset, cash_received: f.cashReceived,
+      })),
+      transfers: calc.transfers.map((t) => ({
+        from_session_player_id: t.from.id, to_session_player_id: t.to.id, amount: t.amount,
+      })),
+      updated_at: new Date().toISOString(),
+    };
+    checkError(await sb.from('poker_sessions').update({ settlement, status: 'completed' }).eq('id', session.id), 'שמירת התחשבנות');
+    session.settlement = settlement;
+    session.status = 'completed';
+    settlementDraft = null;
+    closeModal();
+    renderScreen();
   }
 
   // =====================================================================
