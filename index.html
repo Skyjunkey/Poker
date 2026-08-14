@@ -1009,7 +1009,8 @@ select.input option {
   // as its own JSON blob on poker_sessions.settlement.
   // =====================================================================
 
- function settlementSummaryCard(session) {
+ 
+function settlementSummaryCard(session) {
   const s = session.settlement;
 
   const finalists = s.finalists.map((f) => Object.assign({}, f, {
@@ -1024,36 +1025,22 @@ select.input option {
         '<h2 class="font-semibold gold">התחשבנות סופית</h2>' +
         '<button class="btn-sm" onclick="openSettlementWizard()">עריכת התחשבנות</button>' +
       '</div>' +
-
       '<div class="card-list mb-3">' +
         finalists.map((f, i) =>
           '<div class="assign-row">' +
             '<p class="text-sm font-semibold mb-1">' +
               medals[i] + ' ' + esc(f.sp ? f.sp.display_name : '') +
             '</p>' +
-
             '<div class="text-xs muted">' +
-              '<div class="row-between">' +
-                '<span>זכייה</span>' +
-                '<span class="tabular">' + formatMoney(f.gross_payout) + '</span>' +
-              '</div>' +
-
+              '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.gross_payout) + '</span></div>' +
               (f.credit_offset > 0
-                ? '<div class="row-between">' +
-                    '<span>קיזוז אשראי</span>' +
-                    '<span class="tabular">' + formatMoney(f.credit_offset) + '</span>' +
-                  '</div>'
+                ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.credit_offset) + '</span></div>'
                 : '') +
-
-              '<div class="row-between">' +
-                '<span>מזומן שקיבל</span>' +
-                '<span class="tabular">' + formatMoney(f.cash_received) + '</span>' +
-              '</div>' +
+              '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cash_received) + '</span></div>' +
             '</div>' +
           '</div>'
         ).join('') +
       '</div>' +
-
       '<p class="text-sm font-semibold mb-2">העברות</p>';
 
   if (s.transfers.length === 0) {
@@ -1061,24 +1048,17 @@ select.input option {
   } else {
     html += '<div class="card-list">' +
       s.transfers.map((t) => {
-        const from = state.sessionPlayers.find(
-          (sp) => sp.id === t.from_session_player_id
-        );
-
-        const to = state.sessionPlayers.find(
-          (sp) => sp.id === t.to_session_player_id
-        );
+        const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
+        const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
 
         return (
-         '<span style="display:inline-flex;align-items:center;gap:6px;direction:rtl">' +
-  '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
-  '<span>←</span>' +
-  '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
-'</span>' +
-
-            '<span class="tabular gold font-semibold">' +
-              formatMoney(t.amount) +
-            '</span>' +
+          '<div class="row-between text-sm">' +
+            '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
+              '<span dir="auto">' + esc(to ? to.display_name : '') + '</span>' +
+              '<span style="direction:ltr">←</span>' +
+              '<span dir="auto">' + esc(from ? from.display_name : '') + '</span>' +
+            '</div>' +
+            '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
           '</div>'
         );
       }).join('') +
@@ -1086,11 +1066,11 @@ select.input option {
   }
 
   html += '</div>';
-
   return html;
 }
 
-  function openSettlementWizard() {
+
+function openSettlementWizard() {
     const session = state.activeSession;
     const existing = session.settlement;
     if (existing) {
@@ -1302,60 +1282,66 @@ select.input option {
   }
 
   // ---- Step 4: summary, WhatsApp copy, save ----
-  function settlementStep4() {
-    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
-    const gc = computeGameCashCredit(state.transactions);
-    const calc = computeSettlementCalc(settlementDraft);
-    const medals = ['🥇', '🥈', '🥉'];
-    const sortedFinalists = calc.finalists.slice().sort((a, b) => b.grossPayout - a.grossPayout);
+  
+function settlementStep4() {
+  const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+  const gc = computeGameCashCredit(state.transactions);
+  const calc = computeSettlementCalc(settlementDraft);
+  const medals = ['🥇', '🥈', '🥉'];
+  const sortedFinalists = calc.finalists.slice().sort((a, b) => b.grossPayout - a.grossPayout);
 
-    let body = '<div class="card mb-3">' +
-      '<p class="font-semibold mb-2">קופה מקורית</p>' +
-      '<div class="text-sm muted">' +
-        '<div class="row-between"><span>קופה ראשית</span><span class="tabular">' + formatMoney(totals.gamePool) + '</span></div>' +
-        '<div class="row-between"><span>מזומן</span><span class="tabular">' + formatMoney(gc.cash) + '</span></div>' +
-        '<div class="row-between"><span>אשראי</span><span class="tabular">' + formatMoney(gc.credit) + '</span></div>' +
-      '</div></div>';
+  let body = '<div class="card mb-3">' +
+    '<p class="font-semibold mb-2">קופה מקורית</p>' +
+    '<div class="text-sm muted">' +
+      '<div class="row-between"><span>קופה ראשית</span><span class="tabular">' + formatMoney(totals.gamePool) + '</span></div>' +
+      '<div class="row-between"><span>מזומן</span><span class="tabular">' + formatMoney(gc.cash) + '</span></div>' +
+      '<div class="row-between"><span>אשראי</span><span class="tabular">' + formatMoney(gc.credit) + '</span></div>' +
+    '</div></div>';
 
-    body += '<div class="card mb-3"><p class="font-semibold mb-2">שלושת האחרונים</p><div class="card-list">' +
-      sortedFinalists.map((f, i) =>
-        '<div class="assign-row">' +
-          '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp.display_name) + '</p>' +
-          '<div class="text-xs muted">' +
-            '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.grossPayout) + '</span></div>' +
-            (f.creditOffset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.creditOffset) + '</span></div>' : '') +
-            '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cashReceived) + '</span></div>' +
-            (f.stillNeeds > 0 ? '<div class="row-between"><span>יקבל בהעברות</span><span class="tabular">' + formatMoney(f.stillNeeds) + '</span></div>' : '') +
+  body += '<div class="card mb-3"><p class="font-semibold mb-2">שלושת האחרונים</p><div class="card-list">' +
+    sortedFinalists.map((f, i) =>
+      '<div class="assign-row">' +
+        '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp.display_name) + '</p>' +
+        '<div class="text-xs muted">' +
+          '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.grossPayout) + '</span></div>' +
+          (f.creditOffset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.creditOffset) + '</span></div>' : '') +
+          '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cashReceived) + '</span></div>' +
+          (f.stillNeeds > 0 ? '<div class="row-between"><span>יקבל בהעברות</span><span class="tabular">' + formatMoney(f.stillNeeds) + '</span></div>' : '') +
+        '</div>' +
+      '</div>'
+    ).join('') + '</div></div>';
+
+  body += '<div class="card mb-3"><p class="font-semibold mb-2">העברות</p>';
+
+  if (calc.transfers.length === 0) {
+    body += '<p class="text-sm muted">אין צורך בהעברות</p>';
+  } else {
+    body += '<div class="card-list">' +
+      calc.transfers.map((t) =>
+        '<div class="row-between text-sm">' +
+          '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
+            '<span dir="auto">' + esc(t.to.display_name) + '</span>' +
+            '<span style="direction:ltr">←</span>' +
+            '<span dir="auto">' + esc(t.from.display_name) + '</span>' +
           '</div>' +
+          '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
         '</div>'
-      ).join('') + '</div></div>';
-
-    body += '<div class="card mb-3"><p class="font-semibold mb-2">העברות</p>';
-    if (calc.transfers.length === 0) {
-      body += '<p class="text-sm muted">אין צורך בהעברות</p>';
-    } else {
-      body += '<div class="card-list">' + calc.transfers.map((t) =>
-    '<div class="row-between text-sm">' +
-  '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
-    '<bdi dir="auto">' + esc(t.from.display_name) + '</bdi>' +
-    '<span>→</span>' +
-    '<bdi dir="auto">' + esc(t.to.display_name) + '</bdi>' +
-  '</span>' +
-  '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
-'</div>'
-      ).join('') + '</div>';
-    }
-    body += '</div>';
-
-    body += '<button class="btn btn-secondary mb-3" onclick="copySettlementToWhatsapp()">📋 העתק סיכום לוואטסאפ</button>' +
-      '<div class="row gap-2">' +
-        '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
-        '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
-      '</div>';
-    return modalShell('סגירת ערב - סיכום', body);
+      ).join('') +
+    '</div>';
   }
 
-  function copySettlementToWhatsapp() {
+  body += '</div>';
+
+  body += '<button class="btn btn-secondary mb-3" onclick="copySettlementToWhatsapp()">📋 העתק סיכום לוואטסאפ</button>' +
+    '<div class="row gap-2">' +
+      '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
+      '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
+    '</div>';
+
+  return modalShell('סגירת ערב - סיכום', body);
+}
+
+function copySettlementToWhatsapp() {
     const session = state.activeSession;
     const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
     const gc = computeGameCashCredit(state.transactions);
