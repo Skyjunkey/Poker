@@ -1033,18 +1033,24 @@ select.input option {
     if (s.transfers.length === 0) {
       html += '<p class="text-sm muted">לא נדרשו העברות</p>';
     } else {
+  } else {
   html += '<div class="card-list">' + s.transfers.map((t) => {
     const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
     const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
 
     return '<div class="row-between text-sm">' +
-  '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
-    '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
-    '<span>→</span>' +
-    '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
-  '</span>' +
-  '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
-'</div>';
+      '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
+        '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
+        '<span>→</span>' +
+        '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
+      '</span>' +
+      '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+    '</div>';
+  }).join('') + '</div>';
+}
+
+html += '</div>';
+return html;
 }
 
 html += '</div>';
