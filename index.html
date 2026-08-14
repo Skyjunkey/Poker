@@ -1037,14 +1037,14 @@ select.input option {
     const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
     const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
 
-    return '<div class="row-between text-sm"><span dir="ltr">' +
-      esc(from ? from.display_name : '') +
-      ' → ' +
-      esc(to ? to.display_name : '') +
-      '</span><span class="tabular gold font-semibold">' +
-      formatMoney(t.amount) +
-      '</span></div>';
-  }).join('') + '</div>';
+    return '<div class="row-between text-sm">' +
+  '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
+    '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
+    '<span>→</span>' +
+    '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
+  '</span>' +
+  '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+'</div>';
 }
 
 html += '</div>';
@@ -1296,7 +1296,14 @@ return html;
       body += '<p class="text-sm muted">אין צורך בהעברות</p>';
     } else {
       body += '<div class="card-list">' + calc.transfers.map((t) =>
-      '<div class="row-between text-sm"><span dir="ltr">' + esc(t.from.display_name) + ' → ' + esc(t.to.display_name) + '</span><span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span></div>'
+    '<div class="row-between text-sm">' +
+  '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
+    '<bdi dir="auto">' + esc(t.from.display_name) + '</bdi>' +
+    '<span>→</span>' +
+    '<bdi dir="auto">' + esc(t.to.display_name) + '</bdi>' +
+  '</span>' +
+  '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+'</div>'
       ).join('') + '</div>';
     }
     body += '</div>';
