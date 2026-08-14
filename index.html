@@ -1070,12 +1070,11 @@ select.input option {
         );
 
         return (
-          '<div class="row-between text-sm">' +
-            '<span style="display:inline-flex;align-items:center;gap:6px;direction:ltr">' +
-              '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
-              '<span>→</span>' +
-              '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
-            '</span>' +
+         '<span style="display:inline-flex;align-items:center;gap:6px;direction:rtl">' +
+  '<bdi dir="auto">' + esc(from ? from.display_name : '') + '</bdi>' +
+  '<span>←</span>' +
+  '<bdi dir="auto">' + esc(to ? to.display_name : '') + '</bdi>' +
+'</span>' +
 
             '<span class="tabular gold font-semibold">' +
               formatMoney(t.amount) +
