@@ -1031,6 +1031,7 @@ textarea.input {
       sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
     })).sort((a, b) => b.gross_payout - a.gross_payout);
     const medals = ['🥇', '🥈', '🥉'];
+
     let html = '<div class="card mb-5">' +
       '<div class="row-between mb-3"><h2 class="font-semibold gold">התחשבנות סופית</h2>' +
         '<button class="btn-sm" onclick="openSettlementWizard()">עריכת התחשבנות</button>' +
@@ -1048,22 +1049,53 @@ textarea.input {
       '</div>' +
       '<p class="text-sm font-semibold mb-2">העברות</p>';
 
-    if (s.transfers.length === 0) {
+    if (!s.transfers || s.transfers.length === 0) {
       html += '<p class="text-sm muted">לא נדרשו העברות</p>';
     } else {
-      html += '<div class="card-list">' + s.transfers.map((t) => {
+      const groups = {};
+
+      s.transfers.forEach((t) => {
         const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
         const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
+        const recipientId = t.to_session_player_id;
 
-        return '<div class="row-between text-sm">' +
-          '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
-            '<span dir="auto">' + esc(to ? to.display_name : '') + '</span>' +
-            '<span style="direction:ltr">←</span>' +
-            '<span dir="auto">' + esc(from ? from.display_name : '') + '</span>' +
-          '</div>' +
-          '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
-        '</div>';
-      }).join('') + '</div>';
+        if (!groups[recipientId]) {
+          groups[recipientId] = {
+            recipient: to,
+            total: 0,
+            transfers: [],
+          };
+        }
+
+        groups[recipientId].total += Number(t.amount) || 0;
+        groups[recipientId].transfers.push({ from, to, amount: Number(t.amount) || 0 });
+      });
+
+      html += '<div class="card-list">' +
+        Object.values(groups).map((group) =>
+          '<div class="assign-row">' +
+            '<div class="mb-2">' +
+              '<span class="font-semibold">' + esc(group.recipient ? group.recipient.display_name : '') + '</span>' +
+            '</div>' +
+            '<div class="card-list">' +
+              group.transfers.map((t) =>
+                '<div class="row-between text-sm">' +
+                  '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
+                    '<span dir="auto">' + esc(t.to ? t.to.display_name : '') + '</span>' +
+                    '<span style="direction:ltr">←</span>' +
+                    '<span dir="auto">' + esc(t.from ? t.from.display_name : '') + '</span>' +
+                  '</div>' +
+                  '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+                '</div>'
+              ).join('') +
+            '</div>' +
+            '<div class="row-between mt-2">' +
+              '<span class="font-semibold">סה״כ יקבל</span>' +
+              '<span class="tabular gold font-semibold">' + formatMoney(group.total) + '</span>' +
+            '</div>' +
+          '</div>'
+        ).join('') +
+      '</div>';
     }
 
     html += '</div>';
@@ -1315,16 +1347,48 @@ textarea.input {
     if (calc.transfers.length === 0) {
       body += '<p class="text-sm muted">אין צורך בהעברות</p>';
     } else {
-      body += '<div class="card-list">' + calc.transfers.map((t) =>
-        '<div class="row-between text-sm">' +
-          '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
-            '<span dir="auto">' + esc(t.to.display_name) + '</span>' +
-            '<span style="direction:ltr">←</span>' +
-            '<span dir="auto">' + esc(t.from.display_name) + '</span>' +
-          '</div>' +
-          '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
-        '</div>'
-      ).join('') + '</div>';
+      const groups = {};
+
+      calc.transfers.forEach((t) => {
+        const recipientId = t.to.id;
+
+        if (!groups[recipientId]) {
+          groups[recipientId] = {
+            recipient: t.to,
+            total: 0,
+            transfers: [],
+          };
+        }
+
+        groups[recipientId].total += Number(t.amount) || 0;
+        groups[recipientId].transfers.push(t);
+      });
+
+      body += '<div class="card-list">' +
+        Object.values(groups).map((group) =>
+          '<div class="assign-row">' +
+            '<div class="mb-2">' +
+              '<span class="font-semibold">' + esc(group.recipient.display_name) + '</span>' +
+            '</div>' +
+            '<div class="card-list">' +
+              group.transfers.map((t) =>
+                '<div class="row-between text-sm">' +
+                  '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
+                    '<span dir="auto">' + esc(t.to.display_name) + '</span>' +
+                    '<span style="direction:ltr">←</span>' +
+                    '<span dir="auto">' + esc(t.from.display_name) + '</span>' +
+                  '</div>' +
+                  '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+                '</div>'
+              ).join('') +
+            '</div>' +
+            '<div class="row-between mt-2">' +
+              '<span class="font-semibold">סה״כ יקבל</span>' +
+              '<span class="tabular gold font-semibold">' + formatMoney(group.total) + '</span>' +
+            '</div>' +
+          '</div>'
+        ).join('') +
+      '</div>';
     }
 
     body += '</div>';
@@ -1334,12 +1398,14 @@ textarea.input {
         '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
         '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
       '</div>';
+
     return modalShell('סגירת ערב - סיכום', body);
   }
 
   function copySavedSettlementToWhatsapp(sessionId) {
     const session = state.activeSession && state.activeSession.id === sessionId ? state.activeSession : null;
     if (!session || !session.settlement) return;
+
     const s = session.settlement;
     const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
     const gc = computeGameCashCredit(state.transactions);
@@ -1355,27 +1421,57 @@ textarea.input {
     text += 'מזומן: ' + formatMoney(gc.cash) + '\n';
     text += 'אשראי: ' + formatMoney(gc.credit) + '\n\n';
     text += 'שלושת האחרונים\n';
-    finalists.forEach((f, i) => { text += medals[i] + ' ' + (f.sp ? f.sp.display_name : '') + ' — ' + formatMoney(f.gross_payout) + '\n'; });
+
+    finalists.forEach((f, i) => {
+      text += medals[i] + ' ' + (f.sp ? f.sp.display_name : '') + ' — ' + formatMoney(f.gross_payout) + '\n';
+    });
+
     text += '\nהעברות\n';
+
     if (!s.transfers || s.transfers.length === 0) {
       text += 'אין צורך בהעברות\n';
     } else {
+      const groups = {};
+
       s.transfers.forEach((t) => {
         const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
         const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
+        const recipientId = t.to_session_player_id;
 
-        const fromName = '\u2068' + (from ? from.display_name : '') + '\u2069';
-        const toName = '\u2068' + (to ? to.display_name : '') + '\u2069';
+        if (!groups[recipientId]) {
+          groups[recipientId] = {
+            recipient: to,
+            total: 0,
+            transfers: [],
+          };
+        }
 
-        text += '\u200F' +
-          fromName +
-          ' ← ' +
-          toName +
-          ': ' +
-          formatMoney(t.amount) +
-          '\n';
+        groups[recipientId].total += Number(t.amount) || 0;
+        groups[recipientId].transfers.push({ from, to, amount: Number(t.amount) || 0 });
+      });
+
+      Object.values(groups).forEach((group) => {
+        const recipientName = group.recipient ? group.recipient.display_name : '';
+
+        text += '\n' + recipientName + '\n';
+
+        group.transfers.forEach((t) => {
+          const fromName = '\u2068' + (t.from ? t.from.display_name : '') + '\u2069';
+          const toName = '\u2068' + (t.to ? t.to.display_name : '') + '\u2069';
+
+          text += '\u200F' +
+            fromName +
+            ' ← ' +
+            toName +
+            ': ' +
+            formatMoney(t.amount) +
+            '\n';
+        });
+
+        text += 'סה״כ יקבל: ' + formatMoney(group.total) + '\n';
       });
     }
+
     copyTextToClipboard(text);
   }
 
@@ -1394,24 +1490,56 @@ textarea.input {
     text += 'מזומן: ' + formatMoney(gc.cash) + '\n';
     text += 'אשראי: ' + formatMoney(gc.credit) + '\n\n';
     text += 'שלושת האחרונים\n';
-    sortedFinalists.forEach((f, i) => { text += medals[i] + ' ' + f.sp.display_name + ' — ' + formatMoney(f.grossPayout) + '\n'; });
-    text += '\nהעברות\n';
-    if (calc.transfers.length === 0) text += 'אין צורך בהעברות\n';
- else calc.transfers.forEach((t) => {
-  const fromName = '\u2068' + t.from.display_name + '\u2069';
-  const toName = '\u2068' + t.to.display_name + '\u2069';
 
-  text += '\u200F' +
-    fromName +
-    ' ← ' +
-    toName +
-    ': ' +
-    formatMoney(t.amount) +
-    '\n';
-});
+    sortedFinalists.forEach((f, i) => {
+      text += medals[i] + ' ' + f.sp.display_name + ' — ' + formatMoney(f.grossPayout) + '\n';
+    });
+
+    text += '\nהעברות\n';
+
+    if (calc.transfers.length === 0) {
+      text += 'אין צורך בהעברות\n';
+    } else {
+      const groups = {};
+
+      calc.transfers.forEach((t) => {
+        const recipientId = t.to.id;
+
+        if (!groups[recipientId]) {
+          groups[recipientId] = {
+            recipient: t.to,
+            total: 0,
+            transfers: [],
+          };
+        }
+
+        groups[recipientId].total += Number(t.amount) || 0;
+        groups[recipientId].transfers.push(t);
+      });
+
+      Object.values(groups).forEach((group) => {
+        text += '\n' + group.recipient.display_name + '\n';
+
+        group.transfers.forEach((t) => {
+          const fromName = '\u2068' + t.from.display_name + '\u2069';
+          const toName = '\u2068' + t.to.display_name + '\u2069';
+
+          text += '\u200F' +
+            fromName +
+            ' ← ' +
+            toName +
+            ': ' +
+            formatMoney(t.amount) +
+            '\n';
+        });
+
+        text += 'סה״כ יקבל: ' + formatMoney(group.total) + '\n';
+      });
+    }
 
     copyTextToClipboard(text);
   }
+
   function copyTextToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
