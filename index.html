@@ -1240,6 +1240,7 @@ textarea.input {
         ).join('') +
       '</div>' +
       '<p class="text-sm mb-1">מזומן שחולק: <span id="settlement-cash-sum" class="tabular font-semibold">' + formatMoney(0) + '</span> / ' + formatMoney(gc.cash) + '</p>' +
+      '<p class="text-sm mb-1">נותר לחלק: <span id="settlement-cash-remaining" class="tabular font-semibold gold">' + formatMoney(gc.cash) + '</span></p>' +
       '<p id="settlement-cash-error" class="text-xs red mb-3" style="display:none"></p>' +
       '<div class="row gap-2">' +
         '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(2)">חזרה</button>' +
@@ -1263,6 +1264,13 @@ textarea.input {
     if (el) {
       el.textContent = formatMoney(sum);
       el.className = 'tabular font-semibold ' + (equal ? 'gold' : 'red');
+    }
+
+    const remainingEl = document.getElementById('settlement-cash-remaining');
+    if (remainingEl) {
+      const remaining = Math.round((target - sum) * 100) / 100;
+      remainingEl.textContent = formatMoney(Math.abs(remaining));
+      remainingEl.className = 'tabular font-semibold ' + (remaining === 0 ? 'gold' : 'red');
     }
 
     const err = document.getElementById('settlement-cash-error');
