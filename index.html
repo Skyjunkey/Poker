@@ -1387,7 +1387,18 @@ textarea.input {
     sortedFinalists.forEach((f, i) => { text += medals[i] + ' ' + f.sp.display_name + ' — ' + formatMoney(f.grossPayout) + '\n'; });
     text += '\nהעברות\n';
     if (calc.transfers.length === 0) text += 'אין צורך בהעברות\n';
-    else calc.transfers.forEach((t) => { text += t.from.display_name + ' → ' + t.to.display_name + ': ' + formatMoney(t.amount) + '\n'; });
+ else calc.transfers.forEach((t) => {
+  const fromName = '\u2068' + t.from.display_name + '\u2069';
+  const toName = '\u2068' + t.to.display_name + '\u2069';
+
+  text += '\u200F' +
+    fromName +
+    ' ← ' +
+    toName +
+    ': ' +
+    formatMoney(t.amount) +
+    '\n';
+});
 
     copyTextToClipboard(text);
   }
