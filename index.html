@@ -1240,7 +1240,7 @@ textarea.input {
         ).join('') +
       '</div>' +
       '<p class="text-sm mb-1">מזומן שחולק: <span id="settlement-cash-sum" class="tabular font-semibold">' + formatMoney(0) + '</span> / ' + formatMoney(gc.cash) + '</p>' +
-      '<p id="settlement-cash-error" class="text-xs red mb-3" style="display:none">סך המזומן שחולק לא יכול לעלות על המזומן שבקופה</p>' +
+      '<p id="settlement-cash-error" class="text-xs red mb-3" style="display:none"></p>' +
       '<div class="row gap-2">' +
         '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(2)">חזרה</button>' +
         '<button id="settlement-step3-next" class="btn btn-primary" style="flex:1" onclick="captureSettlementCash(' + gc.cash + ')">המשך</button>' +
@@ -1249,26 +1249,63 @@ textarea.input {
   }
   function updateSettlementCashSum(cashPool) {
     let sum = 0;
-    document.querySelectorAll('.settlement-cash-input').forEach((inp) => { sum += Number(inp.value) || 0; });
-    const over = sum > cashPool + 0.005;
+    document.querySelectorAll('.settlement-cash-input').forEach((inp) => {
+      sum += Number(inp.value) || 0;
+    });
+
+    sum = Math.round(sum * 100) / 100;
+    const target = Math.round(cashPool * 100) / 100;
+    const equal = Math.abs(sum - target) <= 0.005;
+    const over = sum > target + 0.005;
+    const under = sum < target - 0.005;
+
     const el = document.getElementById('settlement-cash-sum');
-    if (el) { el.textContent = formatMoney(sum); el.className = 'tabular font-semibold ' + (over ? 'red' : 'gold'); }
+    if (el) {
+      el.textContent = formatMoney(sum);
+      el.className = 'tabular font-semibold ' + (equal ? 'gold' : 'red');
+    }
+
     const err = document.getElementById('settlement-cash-error');
-    if (err) err.style.display = over ? 'block' : 'none';
+    if (err) {
+      if (over) {
+        err.style.display = 'block';
+        err.textContent = 'סך המזומן שחולק גבוה מהמזומן שבקופה ב-' + formatMoney(sum - target);
+      } else if (under) {
+        err.style.display = 'block';
+        err.textContent = 'נשארו ' + formatMoney(target - sum) + ' מזומן בקופה. יש לחלק את כל המזומן לפני שממשיכים.';
+      } else {
+        err.style.display = 'none';
+        err.textContent = '';
+      }
+    }
+
     const btn = document.getElementById('settlement-step3-next');
-    if (btn) btn.disabled = over;
+    if (btn) btn.disabled = !equal;
   }
+
   function captureSettlementCash(cashPool) {
     let sum = 0;
+
     document.querySelectorAll('.settlement-cash-input').forEach((inp) => {
       const v = Number(inp.value) || 0;
       settlementDraft.cashReceived[inp.dataset.id] = v;
       sum += v;
     });
-    if (sum > cashPool + 0.005) {
-      alert('סך המזומן שחולק לא יכול לעלות על המזומן שבקופה');
+
+    sum = Math.round(sum * 100) / 100;
+    const target = Math.round(cashPool * 100) / 100;
+
+    if (Math.abs(sum - target) > 0.005) {
+      const diff = Math.round(Math.abs(target - sum) * 100) / 100;
+
+      if (sum < target) {
+        alert('יש לחלק את כל המזומן שבקופה. חסרים ' + formatMoney(diff) + ' בחלוקת המזומן.');
+      } else {
+        alert('חולק יותר מזומן ממה שיש בקופה ב-' + formatMoney(diff) + '.');
+      }
       return;
     }
+
     goSettlementStep(4);
   }
 
@@ -1311,6 +1348,48 @@ textarea.input {
       if (creditorsCopy[j].amount <= 0.004) j++;
     }
     return { finalists, debtors, creditors, transfers };
+  }
+
+  
+  function validateSettlementBalance(draft) {
+    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+    const calc = computeSettlementCalc(draft);
+
+    const grossTotal = Math.round(
+      calc.finalists.reduce((sum, f) => sum + Number(f.grossPayout || 0), 0) * 100
+    ) / 100;
+
+    const creditOffsetTotal = Math.round(
+      calc.finalists.reduce((sum, f) => sum + Number(f.creditOffset || 0), 0) * 100
+    ) / 100;
+
+    const cashReceivedTotal = Math.round(
+      calc.finalists.reduce((sum, f) => sum + Number(f.cashReceived || 0), 0) * 100
+    ) / 100;
+
+    const transferTotal = Math.round(
+      calc.transfers.reduce((sum, t) => sum + Number(t.amount || 0), 0) * 100
+    ) / 100;
+
+    const coveredTotal = Math.round(
+      (creditOffsetTotal + cashReceivedTotal + transferTotal) * 100
+    ) / 100;
+
+    const mainPot = Math.round(Number(totals.gamePool || 0) * 100) / 100;
+
+    const payoutsMatchPot = Math.abs(grossTotal - mainPot) <= 0.005;
+    const settlementBalanced = Math.abs(coveredTotal - grossTotal) <= 0.005;
+
+    return {
+      valid: payoutsMatchPot && settlementBalanced,
+      mainPot,
+      grossTotal,
+      creditOffsetTotal,
+      cashReceivedTotal,
+      transferTotal,
+      coveredTotal,
+      difference: Math.round((grossTotal - coveredTotal) * 100) / 100,
+    };
   }
 
   // ---- Step 4: summary, WhatsApp copy, save ----
@@ -1393,10 +1472,22 @@ textarea.input {
 
     body += '</div>';
 
+    const balance = validateSettlementBalance(settlementDraft);
+
+    if (!balance.valid) {
+      body += '<div class="assign-row mb-3" style="border:1px solid rgba(192,57,43,0.55)">' +
+        '<p class="text-sm font-semibold red mb-1">⚠ ההתחשבנות לא מאוזנת</p>' +
+        '<p class="text-xs muted">סך זכיות: ' + formatMoney(balance.grossTotal) +
+        ' · מכוסה בפועל: ' + formatMoney(balance.coveredTotal) +
+        ' · הפרש: ' + formatMoney(Math.abs(balance.difference)) + '</p>' +
+        '<p class="text-xs muted mt-2">חזרו לשלב חלוקת המזומן ותקנו את החלוקה לפני סגירת הערב.</p>' +
+      '</div>';
+    }
+
     body += '<button class="btn btn-secondary mb-3" onclick="copySettlementToWhatsapp()">📋 העתק סיכום לוואטסאפ</button>' +
       '<div class="row gap-2">' +
         '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
-        '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
+        '<button class="btn btn-primary" style="flex:1" ' + (balance.valid ? '' : 'disabled') + ' onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
       '</div>';
 
     return modalShell('סגירת ערב - סיכום', body);
@@ -1569,17 +1660,42 @@ textarea.input {
 
   async function saveSettlement() {
     const session = state.activeSession;
+
+    const balance = validateSettlementBalance(settlementDraft);
+    if (!balance.valid) {
+      alert(
+        'לא ניתן לסגור את הערב כי ההתחשבנות לא מאוזנת.\n' +
+        'סך זכיות: ' + formatMoney(balance.grossTotal) + '\n' +
+        'מכוסה בפועל: ' + formatMoney(balance.coveredTotal) + '\n' +
+        'הפרש: ' + formatMoney(Math.abs(balance.difference))
+      );
+      return;
+    }
+
     const calc = computeSettlementCalc(settlementDraft);
     const settlement = {
       finalists: calc.finalists.map((f) => ({
-        session_player_id: f.sp.id, gross_payout: f.grossPayout, credit_offset: f.creditOffset, cash_received: f.cashReceived,
+        session_player_id: f.sp.id,
+        gross_payout: f.grossPayout,
+        credit_offset: f.creditOffset,
+        cash_received: f.cashReceived,
       })),
       transfers: calc.transfers.map((t) => ({
-        from_session_player_id: t.from.id, to_session_player_id: t.to.id, amount: t.amount,
+        from_session_player_id: t.from.id,
+        to_session_player_id: t.to.id,
+        amount: t.amount,
       })),
       updated_at: new Date().toISOString(),
     };
-    checkError(await sb.from('poker_sessions').update({ settlement, status: 'completed' }).eq('id', session.id), 'שמירת התחשבנות');
+
+    const result = await sb
+      .from('poker_sessions')
+      .update({ settlement, status: 'completed' })
+      .eq('id', session.id);
+
+    checkError(result, 'שמירת התחשבנות');
+    if (result.error) return;
+
     session.settlement = settlement;
     session.status = 'completed';
     settlementDraft = null;
