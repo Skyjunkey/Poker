@@ -44,6 +44,7 @@
   .muted-30 { color: rgba(242,239,233,0.3); }
   .gold { color: var(--gold); }
   .red { color: var(--red); }
+  .green { color: #4ade80; }
   .text-xs { font-size: 0.75rem; }
   .text-sm { font-size: 0.875rem; }
   .text-lg { font-size: 1.125rem; }
@@ -85,7 +86,7 @@
   .link.red-link { color: rgba(192,57,43,0.85); }
   .field { display: block; margin-bottom: 0.75rem; }
   .field-label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: rgba(242,239,233,0.7); }
- .input,
+  .input,
 textarea.input {
     width: 100%;
     border-radius: 0.75rem;
@@ -96,10 +97,9 @@ textarea.input {
     outline: none;
     font-family: inherit;
     font-size: 1rem;
-}
+  }
 
-/* תפריטי בחירה */
-select.input {
+  select.input {
     width: 100%;
     border-radius: 0.75rem;
     background: #0f3d2e !important;
@@ -110,13 +110,12 @@ select.input {
     font-family: inherit;
     font-size: 1rem;
     font-weight: 600;
-}
+  }
 
-/* האפשרויות בתוך הרשימה */
-select.input option {
+  select.input option {
     background: #0f3d2e !important;
     color: #d4a24e !important;
-}
+  }
   .input:focus { border-color: var(--gold); }
   textarea.input { resize: none; }
   .toggle-group { display: flex; border-radius: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); padding: 0.25rem; }
@@ -128,6 +127,7 @@ select.input option {
   .switch.on .knob { right: 22px; }
   .badge { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; }
   .badge-red { background: rgba(192,57,43,0.2); color: #e08b80; }
+  .badge-green { background: rgba(74,222,128,0.18); color: #86efac; }
   .buy-row { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 0.25rem; margin: 0 -0.25rem; border-radius: 0.5rem; background: none; color: var(--cream); text-align: inherit; }
   .buy-row:active { background: rgba(255,255,255,0.05); }
   .divider-top { border-top: 1px solid rgba(255,255,255,0.1); }
@@ -136,7 +136,7 @@ select.input option {
   @keyframes slideup { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .modal-close { width: 2rem; height: 2rem; border-radius: 999px; background: rgba(255,255,255,0.1); color: rgba(242,239,233,0.7); }
   .bottom-nav { position: fixed; bottom: 1rem; left: 0; right: 0; display: flex; justify-content: center; z-index: 20; }
-  .bottom-nav-inner { max-width: 32rem; width: calc(100% - 2rem); margin: 0 1rem; display: grid; grid-template-columns: 1fr 1fr; background: rgba(10,43,32,0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; overflow: hidden; backdrop-filter: blur(6px); }
+  .bottom-nav-inner { max-width: 32rem; width: calc(100% - 2rem); margin: 0 1rem; display: grid; grid-template-columns: 1fr 1fr 1fr; background: rgba(10,43,32,0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; overflow: hidden; backdrop-filter: blur(6px); }
   .nav-btn { padding: 0.75rem; font-size: 0.875rem; font-weight: 500; background: none; color: rgba(242,239,233,0.6); }
   .nav-btn.active { color: var(--gold); }
   .empty { text-align: center; padding: 2.5rem 0; color: rgba(242,239,233,0.5); }
@@ -180,6 +180,7 @@ select.input option {
   const confirmDeleteIds = new Set();
   const confirmRemovePlayerIds = new Set();
   let settlementDraft = null; // multi-step "close night" wizard state, see settlement section below
+  let statsData = null; // { sessions, sessionPlayers, transactions } — completed+settled nights only, loaded lazily
 
   // =====================================================================
   // Helpers
@@ -311,6 +312,7 @@ select.input option {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'poker_sessions' }, async () => {
         await fetchSessions();
         if (state.activeSessionId) state.activeSession = await fetchSession(state.activeSessionId);
+        if (state.screen === 'stats') await loadStatsData();
         renderScreen();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, async () => {
@@ -319,10 +321,12 @@ select.input option {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'session_players' }, async () => {
         if (state.activeSessionId) state.sessionPlayers = await fetchSessionPlayers(state.activeSessionId);
+        if (state.screen === 'stats') await loadStatsData();
         renderScreen();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, async () => {
         if (state.activeSessionId) state.transactions = await fetchTransactions(state.activeSessionId);
+        if (state.screen === 'stats') await loadStatsData();
         renderScreen();
       })
       .subscribe();
@@ -334,6 +338,12 @@ select.input option {
   function goNights() { state.screen = 'nights'; state.activeSessionId = null; renderAll(); }
   function goPlayers() { state.screen = 'players'; renderAll(); }
   async function goNight(id) { await loadNight(id); state.screen = 'night'; renderAll(); }
+  async function goStats() {
+    state.screen = 'stats';
+    renderAll();
+    await loadStatsData();
+    renderScreen();
+  }
 
   // =====================================================================
   // Modal plumbing
@@ -389,13 +399,15 @@ select.input option {
     if (state.screen === 'nights') root.innerHTML = nightsScreen();
     else if (state.screen === 'players') root.innerHTML = playersScreen();
     else if (state.screen === 'night') root.innerHTML = nightScreen();
+    else if (state.screen === 'stats') root.innerHTML = statsScreen();
     renderNav();
   }
   function renderNav() {
     const onNights = state.screen === 'nights' || state.screen === 'night';
     document.getElementById('navRoot').innerHTML =
       '<button class="nav-btn ' + (onNights ? 'active' : '') + '" onclick="goNights()">🃏 ערבי פוקר</button>' +
-      '<button class="nav-btn ' + (state.screen === 'players' ? 'active' : '') + '" onclick="goPlayers()">👥 שחקנים קבועים</button>';
+      '<button class="nav-btn ' + (state.screen === 'players' ? 'active' : '') + '" onclick="goPlayers()">👥 שחקנים קבועים</button>' +
+      '<button class="nav-btn ' + (state.screen === 'stats' ? 'active' : '') + '" onclick="goStats()">🏆 סטטיסטיקות</button>';
   }
 
   // =====================================================================
@@ -416,6 +428,7 @@ select.input option {
   function nightCard(s) {
     const confirming = confirmDeleteIds.has(s.id);
     const openFn = 'goNight(\'' + s.id + '\')';
+    const isClosed = s.status === 'completed' && !!s.settlement;
     let actions = '';
     if (confirming) {
       actions =
@@ -428,7 +441,10 @@ select.input option {
       '<div class="card clickable" onclick="' + (confirming ? '' : openFn) + '">' +
         '<div class="row-between">' +
           '<p class="font-semibold">' + esc(s.name) + '</p>' +
-          (s.is_bounty_event ? '<span class="badge badge-red">באונטי</span>' : '') +
+          '<div class="row gap-2">' +
+            (isClosed ? '<span class="badge badge-green">✓ ערב סגור</span>' : '') +
+            (s.is_bounty_event ? '<span class="badge badge-red">בונטי</span>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="row-between mt-2">' +
           '<p class="text-sm muted">' + fmtDate(s.session_date) + '</p>' +
@@ -455,11 +471,11 @@ select.input option {
       '<div class="field"><span class="field-label">קנייה ברירת מחדל (₪)</span><input id="nn-buyin" type="number" inputmode="decimal" class="input" value="100" /></div>' +
       '<div class="field"><span class="field-label">הערות</span><textarea id="nn-notes" class="input" rows="2" placeholder="הערות (אופציונלי)"></textarea></div>' +
       '<div class="row-between" style="background:rgba(0,0,0,0.2);border-radius:0.75rem;padding:0.6rem 0.75rem;margin-bottom:0.75rem">' +
-        '<span class="text-sm">ערב באונטי?</span>' +
+        '<span class="text-sm">ערב בונטי?</span>' +
         '<div id="nn-switch" class="switch" onclick="toggleNightBountySwitch()"><div class="knob"></div></div>' +
       '</div>' +
       '<div id="nn-bounty-field" style="display:none">' +
-        '<div class="field"><span class="field-label">סכום באונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="50" /></div>' +
+        '<div class="field"><span class="field-label">סכום בונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="100" /></div>' +
       '</div>' +
       '<button class="btn btn-primary" onclick="createNight()">יצירת ערב</button>';
     return modalShell('ערב פוקר חדש', body);
@@ -562,7 +578,7 @@ select.input option {
       '<div class="grid-3 mb-5">' +
         statChip('שחקנים', String(totals.playerCount)) +
         gamePoolChip(totals) +
-        statChip('קופת באונטי', formatMoney(totals.bountyPool)) +
+        statChip('קופת בונטי', formatMoney(totals.bountyPool)) +
         statChip('מזומן', formatMoney(totals.totalCash)) +
         statChip('אשראי', formatMoney(totals.totalCredit)) +
         statChip('סה״כ', formatMoney(totals.grandTotal), true) +
@@ -577,14 +593,14 @@ select.input option {
     if (session.is_bounty_event) {
       html += '<div class="card mb-5" style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3)">' +
         '<div class="row-between mb-2">' +
-          '<h2 class="font-semibold red">קופת באונטי</h2>' +
+          '<h2 class="font-semibold red">קופת בונטי</h2>' +
           '<button class="btn-sm" ' + (state.sessionPlayers.length === 0 ? 'disabled' : '') + ' onclick="openModal(\'bountyPrizes\')">' +
             (prizes.length > 0 ? 'ניהול פרסים' : 'הגדרת פרסים') +
           '</button>' +
         '</div>' +
         '<div class="' + (prizes.length > 0 ? 'grid-4' : 'grid-3') + ' text-sm muted mb-1">' +
           '<div><p class="text-xs muted-40">שחקנים</p><p class="tabular">' + totals.playerCount + '</p></div>' +
-          '<div><p class="text-xs muted-40">באונטי לשחקן</p><p class="tabular">' + formatMoney(session.bounty_amount) + '</p></div>' +
+          '<div><p class="text-xs muted-40">בונטי לשחקן</p><p class="tabular">' + formatMoney(session.bounty_amount) + '</p></div>' +
           '<div><p class="text-xs muted-40">סה"כ קופה</p><p class="tabular">' + formatMoney(totals.bountyPool) + '</p></div>' +
           (prizes.length > 0 ? '<div><p class="text-xs muted-40">יתרת קופה</p><p class="tabular font-semibold gold">' + formatMoney(bountyRemaining) + '</p></div>' : '') +
         '</div>';
@@ -598,13 +614,13 @@ select.input option {
               '<span class="' + (winner ? 'gold font-semibold' : 'muted-40') + '">' + (winner ? esc(winner.display_name) : 'טרם חולק') + '</span>' +
             '</div>';
           }).join('') +
-          (prizesSum !== totals.bountyPool ? '<p class="text-xs red pt-1">⚠ סך הפרסים (' + formatMoney(prizesSum) + ') אינו שווה לקופת הבאונטי (' + formatMoney(totals.bountyPool) + ')</p>' : '') +
+          (prizesSum !== totals.bountyPool ? '<p class="text-xs red pt-1">⚠ סך הפרסים (' + formatMoney(prizesSum) + ') אינו שווה לקופת הבונטי (' + formatMoney(totals.bountyPool) + ')</p>' : '') +
         '</div>';
       }
       html += '</div>';
     }
 
-   html += '<button class="btn" style="background:#0f3d2e;color:#d4a24e;border:1px dashed #d4a24e;margin-bottom:1rem" onclick="openModal(\'addPlayer\')">+ הוספת שחקן לערב</button>';
+    html += '<button class="btn" style="background:#0f3d2e;color:#d4a24e;border:1px dashed #d4a24e;margin-bottom:1rem" onclick="openModal(\'addPlayer\')">+ הוספת שחקן לערב</button>';
 
     if (playerTotals.length === 0) {
       html += '<p class="empty">עדיין אין שחקנים בערב זה</p>';
@@ -647,9 +663,9 @@ select.input option {
     });
 
     html += '<div class="row-between divider-top pt-1 mt-1 font-semibold" style="color:var(--cream)"><span>סה״כ היום</span><span class="tabular">' + formatMoney(t.gameContribution) + '</span></div>';
-    if (isBounty) html += '<div class="row-between pt-1"><span>באונטי שולם</span><span class="tabular">' + formatMoney(t.bountyContribution) + '</span></div>';
+    if (isBounty) html += '<div class="row-between pt-1"><span>בונטי שולם</span><span class="tabular">' + formatMoney(t.bountyContribution) + '</span></div>';
     if (t.gamePayout > 0) html += '<div class="row-between gold"><span>קאשאאוט</span><span class="tabular">' + formatMoney(t.gamePayout) + '</span></div>';
-    if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה באונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
+    if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה בונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
     html += '</div>';
 
     const confirmingRemove = confirmRemovePlayerIds.has(sp.id);
@@ -685,7 +701,7 @@ select.input option {
         p.assigned_session_player_id === id ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p
       );
       session.bounty_prizes = cleaned;
-      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי באונטי');
+      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי בונטי');
     }
   }
 
@@ -711,8 +727,8 @@ select.input option {
         '</div><input type="hidden" id="ap-buyin-method" value="cash" />' +
       '</div>' +
       (session.is_bounty_event ?
-        '<div class="field"><span class="field-label">סכום באונטי (₪)</span><input id="ap-bounty" type="number" inputmode="decimal" class="input" value="' + session.bounty_amount + '" /></div>' +
-        '<div class="field"><span class="field-label">אמצעי תשלום לבאונטי</span>' +
+        '<div class="field"><span class="field-label">סכום בונטי (₪)</span><input id="ap-bounty" type="number" inputmode="decimal" class="input" value="' + session.bounty_amount + '" /></div>' +
+        '<div class="field"><span class="field-label">אמצעי תשלום לבונטי</span>' +
           '<div class="toggle-group">' +
             '<button class="toggle-btn active" data-method="cash" onclick="setToggle(this,\'ap-bounty-method\')">מזומן</button>' +
             '<button class="toggle-btn" data-method="credit_card" onclick="setToggle(this,\'ap-bounty-method\')">אשראי</button>' +
@@ -808,8 +824,8 @@ select.input option {
 
   // ---- Transactions list (void/restore) ----
   const TYPE_LABELS = {
-    initial_buy_in: 'קנייה ראשונית', rebuy: 'ריביי', bounty_contribution: 'תשלום באונטי',
-    game_payout: 'קאשאאוט', bounty_payout: 'זכיית באונטי', adjustment: 'התאמה',
+    initial_buy_in: 'קנייה ראשונית', rebuy: 'ריביי', bounty_contribution: 'תשלום בונטי',
+    game_payout: 'קאשאאוט', bounty_payout: 'זכיית בונטי', adjustment: 'התאמה',
   };
   function transactionsModal(sessionPlayerId) {
     const sp = state.sessionPlayers.find((s) => s.id === sessionPlayerId);
@@ -820,7 +836,7 @@ select.input option {
         '<div class="assign-row" style="' + (t.is_voided ? 'opacity:0.4' : '') + '">' +
           '<div class="row-between">' +
             '<div><p class="text-sm font-semibold">' + (TYPE_LABELS[t.transaction_type] || t.transaction_type) + (t.is_voided ? ' <span class="red text-xs">(מבוטל)</span>' : '') + '</p>' +
-              '<p class="text-xs muted">' + fmtDateTime(t.created_at) + ' · ' + (t.payment_method === 'cash' ? 'מזומן' : 'אשראי') + ' · ' + (t.pool_type === 'game' ? 'קופת משחק' : 'קופת באונטי') + '</p>' +
+              '<p class="text-xs muted">' + fmtDateTime(t.created_at) + ' · ' + (t.payment_method === 'cash' ? 'מזומן' : 'אשראי') + ' · ' + (t.pool_type === 'game' ? 'קופת משחק' : 'קופת בונטי') + '</p>' +
               (t.notes ? '<p class="text-xs muted">' + esc(t.notes) + '</p>' : '') +
             '</div>' +
             '<div class="row gap-2"><span class="tabular font-semibold">' + formatMoney(t.amount) + '</span>' +
@@ -871,14 +887,14 @@ select.input option {
       const fallback = n > 0 ? Math.round(totals.bountyPool / n) : 0;
       const draft = Array.from({ length: n }, () => fallback || session.bounty_amount);
       const body =
-        '<p class="text-sm muted mb-3">' + n + ' שחקנים → ' + n + ' פרסים להגדרה · קופת באונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · יתרת חלוקה: <span id="bp-remaining" class="font-semibold">' + formatMoney(totals.bountyPool - draft.reduce((a, b) => a + b, 0)) + '</span></p>' +
+        '<p class="text-sm muted mb-3">' + n + ' שחקנים → ' + n + ' פרסים להגדרה · קופת בונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · יתרת חלוקה: <span id="bp-remaining" class="font-semibold">' + formatMoney(totals.bountyPool - draft.reduce((a, b) => a + b, 0)) + '</span></p>' +
         '<button class="btn btn-secondary mb-3" style="width:100%" onclick="autoDistributeClick(' + totals.bountyPool + ')">🎲 חלוקה אוטומטית</button>' +
         '<div class="card-list mb-3" style="max-height:18rem;overflow-y:auto">' +
           draft.map((a, i) => '<div class="row gap-2"><span class="text-sm muted" style="width:4rem;flex-shrink:0">פרס ' + (i + 1) + '</span><input class="input bp-draft-input" data-idx="' + i + '" type="number" inputmode="decimal" value="' + a + '" oninput="updateBpRemaining(' + totals.bountyPool + ')" /></div>').join('') +
         '</div>' +
         '<p id="bp-overage-msg" class="text-xs red mb-3" style="display:none"></p>' +
         '<button id="bp-create-btn" class="btn btn-primary" onclick="createPrizes()">יצירת פרסים</button>';
-      return modalShell('פרסי באונטי', body);
+      return modalShell('פרסי בונטי', body);
     }
 
     const assignedPlayerIds = new Set(prizes.map((p) => p.assigned_session_player_id).filter(Boolean));
@@ -886,7 +902,7 @@ select.input option {
     const sum = prizes.reduce((a, p) => a + Number(p.amount), 0);
     const isEqual = Math.round(sum * 100) / 100 === Math.round(totals.bountyPool * 100) / 100;
 
-    let body = '<p class="text-sm muted mb-3">קופת באונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · הוגדר: <span class="font-semibold">' + formatMoney(sum) + '</span></p>' +
+    let body = '<p class="text-sm muted mb-3">קופת בונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · הוגדר: <span class="font-semibold">' + formatMoney(sum) + '</span></p>' +
       '<div class="card-list mb-3" style="max-height:24rem;overflow-y:auto">';
 
     body += prizes.map((p, i) => {
@@ -904,9 +920,9 @@ select.input option {
     }).join('');
 
     body += '</div>';
-    if (!isEqual) body += '<p class="text-xs red mb-3">סך הפרסים (' + formatMoney(sum) + ') אינו שווה לקופת הבאונטי (' + formatMoney(totals.bountyPool) + ')</p>';
+    if (!isEqual) body += '<p class="text-xs red mb-3">סך הפרסים (' + formatMoney(sum) + ') אינו שווה לקופת הבונטי (' + formatMoney(totals.bountyPool) + ')</p>';
     body += '<button class="link" style="width:100%;text-align:center;padding:0.25rem" onclick="resetPrizes()">איפוס והגדרה מחדש של כל הפרסים</button>';
-    return modalShell('פרסי באונטי', body);
+    return modalShell('פרסי בונטי', body);
   }
 
   function updateBpRemaining(pool) {
@@ -921,7 +937,7 @@ select.input option {
     const btn = document.getElementById('bp-create-btn');
     if (remaining < 0) {
       msg.style.display = 'block';
-      msg.textContent = 'חריגה מקופת הבאונטי — יש להקטין את הפרסים ב-' + formatMoney(-remaining) + ' כדי לשמור';
+      msg.textContent = 'חריגה מקופת הבונטי — יש להקטין את הפרסים ב-' + formatMoney(-remaining) + ' כדי לשמור';
       btn.disabled = true;
     } else {
       msg.style.display = 'none';
@@ -982,7 +998,7 @@ select.input option {
     const session = state.activeSession;
     const prize = (session.bounty_prizes || []).find((p) => p.id === prizeId);
     if (prize && prize.payout_transaction_id) {
-      checkError(await sb.from('transactions').update({ is_voided: true }).eq('id', prize.payout_transaction_id), 'ביטול תשלום באונטי');
+      checkError(await sb.from('transactions').update({ is_voided: true }).eq('id', prize.payout_transaction_id), 'ביטול תשלום בונטי');
     }
     const nextPrizes = session.bounty_prizes.map((p) => p.id === prizeId ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p);
     checkError(await sb.from('poker_sessions').update({ bounty_prizes: nextPrizes }).eq('id', session.id), 'ביטול שיוך פרס');
@@ -994,7 +1010,7 @@ select.input option {
     const session = state.activeSession;
     const hadAssigned = (session.bounty_prizes || []).some((p) => p.assigned_session_player_id);
     if (hadAssigned) {
-      checkError(await sb.from('transactions').update({ is_voided: true }).eq('session_id', session.id).eq('transaction_type', 'bounty_payout'), 'איפוס תשלומי באונטי');
+      checkError(await sb.from('transactions').update({ is_voided: true }).eq('session_id', session.id).eq('transaction_type', 'bounty_payout'), 'איפוס תשלומי בונטי');
     }
     checkError(await sb.from('poker_sessions').update({ bounty_prizes: [] }).eq('id', session.id), 'איפוס פרסים');
     state.activeSession.bounty_prizes = [];
@@ -1009,68 +1025,52 @@ select.input option {
   // as its own JSON blob on poker_sessions.settlement.
   // =====================================================================
 
- 
-function settlementSummaryCard(session) {
-  const s = session.settlement;
-
-  const finalists = s.finalists.map((f) => Object.assign({}, f, {
-    sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
-  })).sort((a, b) => b.gross_payout - a.gross_payout);
-
-  const medals = ['🥇', '🥈', '🥉'];
-
-  let html =
-    '<div class="card mb-5">' +
-      '<div class="row-between mb-3">' +
-        '<h2 class="font-semibold gold">התחשבנות סופית</h2>' +
+  function settlementSummaryCard(session) {
+    const s = session.settlement;
+    const finalists = s.finalists.map((f) => Object.assign({}, f, {
+      sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
+    })).sort((a, b) => b.gross_payout - a.gross_payout);
+    const medals = ['🥇', '🥈', '🥉'];
+    let html = '<div class="card mb-5">' +
+      '<div class="row-between mb-3"><h2 class="font-semibold gold">התחשבנות סופית</h2>' +
         '<button class="btn-sm" onclick="openSettlementWizard()">עריכת התחשבנות</button>' +
       '</div>' +
+      '<button class="btn btn-secondary mb-3" onclick="copySavedSettlementToWhatsapp(\'' + session.id + '\')">📋 העתק סיכום לוואטסאפ</button>' +
       '<div class="card-list mb-3">' +
-        finalists.map((f, i) =>
-          '<div class="assign-row">' +
-            '<p class="text-sm font-semibold mb-1">' +
-              medals[i] + ' ' + esc(f.sp ? f.sp.display_name : '') +
-            '</p>' +
-            '<div class="text-xs muted">' +
-              '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.gross_payout) + '</span></div>' +
-              (f.credit_offset > 0
-                ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.credit_offset) + '</span></div>'
-                : '') +
-              '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cash_received) + '</span></div>' +
-            '</div>' +
-          '</div>'
-        ).join('') +
+        finalists.map((f, i) => '<div class="assign-row">' +
+          '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp ? f.sp.display_name : '') + '</p>' +
+          '<div class="text-xs muted">' +
+            '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.gross_payout) + '</span></div>' +
+            (f.credit_offset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.credit_offset) + '</span></div>' : '') +
+            '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cash_received) + '</span></div>' +
+          '</div>' +
+        '</div>').join('') +
       '</div>' +
       '<p class="text-sm font-semibold mb-2">העברות</p>';
 
-  if (s.transfers.length === 0) {
-    html += '<p class="text-sm muted">לא נדרשו העברות</p>';
-  } else {
-    html += '<div class="card-list">' +
-      s.transfers.map((t) => {
+    if (s.transfers.length === 0) {
+      html += '<p class="text-sm muted">לא נדרשו העברות</p>';
+    } else {
+      html += '<div class="card-list">' + s.transfers.map((t) => {
         const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
         const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
 
-        return (
-          '<div class="row-between text-sm">' +
-            '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
-              '<span dir="auto">' + esc(to ? to.display_name : '') + '</span>' +
-              '<span style="direction:ltr">←</span>' +
-              '<span dir="auto">' + esc(from ? from.display_name : '') + '</span>' +
-            '</div>' +
-            '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
-          '</div>'
-        );
-      }).join('') +
-    '</div>';
+        return '<div class="row-between text-sm">' +
+          '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
+            '<span dir="auto">' + esc(to ? to.display_name : '') + '</span>' +
+            '<span style="direction:ltr">←</span>' +
+            '<span dir="auto">' + esc(from ? from.display_name : '') + '</span>' +
+          '</div>' +
+          '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    html += '</div>';
+    return html;
   }
 
-  html += '</div>';
-  return html;
-}
-
-
-function openSettlementWizard() {
+  function openSettlementWizard() {
     const session = state.activeSession;
     const existing = session.settlement;
     if (existing) {
@@ -1134,7 +1134,7 @@ function openSettlementWizard() {
     const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
     const mainPot = totals.gamePool;
     const body =
-      '<p class="text-sm muted mb-3">קופה ראשית: <span class="gold font-semibold">' + formatMoney(mainPot) + '</span> (באונטי לא נכלל)</p>' +
+      '<p class="text-sm muted mb-3">קופה ראשית: <span class="gold font-semibold">' + formatMoney(mainPot) + '</span> (בונטי לא נכלל)</p>' +
       '<div class="card-list mb-3">' +
         settlementDraft.finalistIds.map((id) => {
           const sp = state.sessionPlayers.find((s) => s.id === id);
@@ -1282,42 +1282,40 @@ function openSettlementWizard() {
   }
 
   // ---- Step 4: summary, WhatsApp copy, save ----
-  
-function settlementStep4() {
-  const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
-  const gc = computeGameCashCredit(state.transactions);
-  const calc = computeSettlementCalc(settlementDraft);
-  const medals = ['🥇', '🥈', '🥉'];
-  const sortedFinalists = calc.finalists.slice().sort((a, b) => b.grossPayout - a.grossPayout);
+  function settlementStep4() {
+    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+    const gc = computeGameCashCredit(state.transactions);
+    const calc = computeSettlementCalc(settlementDraft);
+    const medals = ['🥇', '🥈', '🥉'];
+    const sortedFinalists = calc.finalists.slice().sort((a, b) => b.grossPayout - a.grossPayout);
 
-  let body = '<div class="card mb-3">' +
-    '<p class="font-semibold mb-2">קופה מקורית</p>' +
-    '<div class="text-sm muted">' +
-      '<div class="row-between"><span>קופה ראשית</span><span class="tabular">' + formatMoney(totals.gamePool) + '</span></div>' +
-      '<div class="row-between"><span>מזומן</span><span class="tabular">' + formatMoney(gc.cash) + '</span></div>' +
-      '<div class="row-between"><span>אשראי</span><span class="tabular">' + formatMoney(gc.credit) + '</span></div>' +
-    '</div></div>';
+    let body = '<div class="card mb-3">' +
+      '<p class="font-semibold mb-2">קופה מקורית</p>' +
+      '<div class="text-sm muted">' +
+        '<div class="row-between"><span>קופה ראשית</span><span class="tabular">' + formatMoney(totals.gamePool) + '</span></div>' +
+        '<div class="row-between"><span>מזומן</span><span class="tabular">' + formatMoney(gc.cash) + '</span></div>' +
+        '<div class="row-between"><span>אשראי</span><span class="tabular">' + formatMoney(gc.credit) + '</span></div>' +
+      '</div></div>';
 
-  body += '<div class="card mb-3"><p class="font-semibold mb-2">שלושת האחרונים</p><div class="card-list">' +
-    sortedFinalists.map((f, i) =>
-      '<div class="assign-row">' +
-        '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp.display_name) + '</p>' +
-        '<div class="text-xs muted">' +
-          '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.grossPayout) + '</span></div>' +
-          (f.creditOffset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.creditOffset) + '</span></div>' : '') +
-          '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cashReceived) + '</span></div>' +
-          (f.stillNeeds > 0 ? '<div class="row-between"><span>יקבל בהעברות</span><span class="tabular">' + formatMoney(f.stillNeeds) + '</span></div>' : '') +
-        '</div>' +
-      '</div>'
-    ).join('') + '</div></div>';
+    body += '<div class="card mb-3"><p class="font-semibold mb-2">שלושת האחרונים</p><div class="card-list">' +
+      sortedFinalists.map((f, i) =>
+        '<div class="assign-row">' +
+          '<p class="text-sm font-semibold mb-1">' + medals[i] + ' ' + esc(f.sp.display_name) + '</p>' +
+          '<div class="text-xs muted">' +
+            '<div class="row-between"><span>זכייה</span><span class="tabular">' + formatMoney(f.grossPayout) + '</span></div>' +
+            (f.creditOffset > 0 ? '<div class="row-between"><span>קיזוז אשראי</span><span class="tabular">' + formatMoney(f.creditOffset) + '</span></div>' : '') +
+            '<div class="row-between"><span>מזומן שקיבל</span><span class="tabular">' + formatMoney(f.cashReceived) + '</span></div>' +
+            (f.stillNeeds > 0 ? '<div class="row-between"><span>יקבל בהעברות</span><span class="tabular">' + formatMoney(f.stillNeeds) + '</span></div>' : '') +
+          '</div>' +
+        '</div>'
+      ).join('') + '</div></div>';
 
-  body += '<div class="card mb-3"><p class="font-semibold mb-2">העברות</p>';
+    body += '<div class="card mb-3"><p class="font-semibold mb-2">העברות</p>';
 
-  if (calc.transfers.length === 0) {
-    body += '<p class="text-sm muted">אין צורך בהעברות</p>';
-  } else {
-    body += '<div class="card-list">' +
-      calc.transfers.map((t) =>
+    if (calc.transfers.length === 0) {
+      body += '<p class="text-sm muted">אין צורך בהעברות</p>';
+    } else {
+      body += '<div class="card-list">' + calc.transfers.map((t) =>
         '<div class="row-between text-sm">' +
           '<div style="display:flex;align-items:center;gap:7px;direction:ltr">' +
             '<span dir="auto">' + esc(t.to.display_name) + '</span>' +
@@ -1326,22 +1324,52 @@ function settlementStep4() {
           '</div>' +
           '<span class="tabular gold font-semibold">' + formatMoney(t.amount) + '</span>' +
         '</div>'
-      ).join('') +
-    '</div>';
+      ).join('') + '</div>';
+    }
+
+    body += '</div>';
+
+    body += '<button class="btn btn-secondary mb-3" onclick="copySettlementToWhatsapp()">📋 העתק סיכום לוואטסאפ</button>' +
+      '<div class="row gap-2">' +
+        '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
+        '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
+      '</div>';
+    return modalShell('סגירת ערב - סיכום', body);
   }
 
-  body += '</div>';
+  function copySavedSettlementToWhatsapp(sessionId) {
+    const session = state.activeSession && state.activeSession.id === sessionId ? state.activeSession : null;
+    if (!session || !session.settlement) return;
+    const s = session.settlement;
+    const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
+    const gc = computeGameCashCredit(state.transactions);
+    const medals = ['🥇', '🥈', '🥉'];
+    const finalists = s.finalists.map((f) => Object.assign({}, f, {
+      sp: state.sessionPlayers.find((sp) => sp.id === f.session_player_id),
+    })).sort((a, b) => b.gross_payout - a.gross_payout);
 
-  body += '<button class="btn btn-secondary mb-3" onclick="copySettlementToWhatsapp()">📋 העתק סיכום לוואטסאפ</button>' +
-    '<div class="row gap-2">' +
-      '<button class="btn btn-secondary" style="flex:1" onclick="goSettlementStep(3)">חזרה</button>' +
-      '<button class="btn btn-primary" style="flex:1" onclick="saveSettlement()">שמירה וסגירת ערב</button>' +
-    '</div>';
+    let text = 'סיכום ערב פוקר';
+    if (session.name) text += ' - ' + session.name;
+    text += '\n\n';
+    text += 'קופה: ' + formatMoney(totals.gamePool) + '\n';
+    text += 'מזומן: ' + formatMoney(gc.cash) + '\n';
+    text += 'אשראי: ' + formatMoney(gc.credit) + '\n\n';
+    text += 'שלושת האחרונים\n';
+    finalists.forEach((f, i) => { text += medals[i] + ' ' + (f.sp ? f.sp.display_name : '') + ' — ' + formatMoney(f.gross_payout) + '\n'; });
+    text += '\nהעברות\n';
+    if (!s.transfers || s.transfers.length === 0) {
+      text += 'אין צורך בהעברות\n';
+    } else {
+      s.transfers.forEach((t) => {
+        const from = state.sessionPlayers.find((sp) => sp.id === t.from_session_player_id);
+        const to = state.sessionPlayers.find((sp) => sp.id === t.to_session_player_id);
+        text += (from ? from.display_name : '') + ' → ' + (to ? to.display_name : '') + ': ' + formatMoney(t.amount) + '\n';
+      });
+    }
+    copyTextToClipboard(text);
+  }
 
-  return modalShell('סגירת ערב - סיכום', body);
-}
-
-function copySettlementToWhatsapp() {
+  function copySettlementToWhatsapp() {
     const session = state.activeSession;
     const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
     const gc = computeGameCashCredit(state.transactions);
@@ -1408,6 +1436,113 @@ function copySettlementToWhatsapp() {
     settlementDraft = null;
     closeModal();
     renderScreen();
+  }
+
+  // =====================================================================
+  // Screen: Statistics ("סטטיסטיקות")
+  // Uses ONLY completed nights that have a saved settlement — everything
+  // here is derived from that subset and never touches active nights or
+  // completed-but-unsettled ones. Read-only; doesn't affect any other screen.
+  // =====================================================================
+
+  async function loadStatsData() {
+    const sessRes = await sb.from('poker_sessions').select('*').eq('status', 'completed').not('settlement', 'is', null);
+    checkError(sessRes, 'טעינת נתוני סטטיסטיקה');
+    const sessions = sessRes.data || [];
+    const ids = sessions.map((s) => s.id);
+
+    let sessionPlayers = [];
+    let transactions = [];
+    if (ids.length > 0) {
+      const [spRes, txRes] = await Promise.all([
+        sb.from('session_players').select('*').in('session_id', ids),
+        sb.from('transactions').select('*').in('session_id', ids),
+      ]);
+      checkError(spRes, 'טעינת שחקני ערבים (סטטיסטיקה)');
+      checkError(txRes, 'טעינת תנועות (סטטיסטיקה)');
+      sessionPlayers = spRes.data || [];
+      transactions = txRes.data || [];
+    }
+    statsData = { sessions, sessionPlayers, transactions };
+  }
+
+  function computeLeaderboard() {
+    if (!statsData) return [];
+    const sessionById = {};
+    statsData.sessions.forEach((s) => { sessionById[s.id] = s; });
+
+    const byPlayer = {}; // permanent player_id -> aggregate
+
+    statsData.sessionPlayers.forEach((sp) => {
+      const session = sessionById[sp.session_id];
+      if (!session || !session.settlement) return;
+
+      const playerId = sp.player_id;
+      if (!byPlayer[playerId]) {
+        const p = state.players.find((pl) => pl.id === playerId);
+        byPlayer[playerId] = { playerId, name: p ? p.name : sp.display_name, nightIds: new Set(), buyIns: 0, winnings: 0 };
+      }
+      const agg = byPlayer[playerId];
+      agg.nightIds.add(session.id);
+
+      const buyInSum = statsData.transactions
+        .filter((t) => !t.is_voided && t.session_player_id === sp.id && (t.transaction_type === 'initial_buy_in' || t.transaction_type === 'rebuy'))
+        .reduce((a, t) => a + Number(t.amount), 0);
+      agg.buyIns += buyInSum;
+
+      const finalistEntry = (session.settlement.finalists || []).find((f) => f.session_player_id === sp.id);
+      agg.winnings += finalistEntry ? Number(finalistEntry.gross_payout) : 0;
+    });
+
+    const rows = Object.values(byPlayer).map((agg) => {
+      const buyIns = Math.round(agg.buyIns * 100) / 100;
+      const winnings = Math.round(agg.winnings * 100) / 100;
+      return {
+        playerId: agg.playerId,
+        name: agg.name,
+        nights: agg.nightIds.size,
+        buyIns,
+        winnings,
+        profit: Math.round((winnings - buyIns) * 100) / 100,
+      };
+    });
+
+    rows.sort((a, b) => b.winnings - a.winnings);
+    return rows;
+  }
+
+  function statsScreen() {
+    let html = '<h1 class="text-2xl font-bold mb-5">🏆 סטטיסטיקות</h1>';
+
+    if (!statsData) {
+      html += '<p class="empty">טוען...</p>';
+      return html;
+    }
+
+    const rows = computeLeaderboard();
+    if (rows.length === 0) {
+      html += '<p class="empty">עדיין אין ערבים סגורים עם התחשבנות שמורה. הסטטיסטיקה תופיע כאן לאחר סגירת ערב ראשון.</p>';
+      return html;
+    }
+
+    html += '<div class="card-list">' + rows.map((r, i) => {
+      const colorClass = r.profit > 0 ? 'green' : r.profit < 0 ? 'red' : '';
+      const sign = r.profit > 0 ? '+' : r.profit < 0 ? '-' : '';
+      return '<div class="card">' +
+        '<p class="font-display font-semibold text-lg mb-2">' + (i + 1) + '. ' + esc(r.name) + '</p>' +
+        '<div class="grid-3 text-sm muted mb-2">' +
+          '<div><p class="text-xs muted-40">ערבים</p><p class="tabular" style="color:var(--cream)">' + r.nights + '</p></div>' +
+          '<div><p class="text-xs muted-40">כניסות</p><p class="tabular" style="color:var(--cream)">' + formatMoney(r.buyIns) + '</p></div>' +
+          '<div><p class="text-xs muted-40">זכיות</p><p class="tabular" style="color:var(--cream)">' + formatMoney(r.winnings) + '</p></div>' +
+        '</div>' +
+        '<div class="row-between divider-top pt-1">' +
+          '<span class="text-sm muted">רווח/הפסד</span>' +
+          '<span class="tabular font-bold ' + colorClass + '">' + sign + formatMoney(Math.abs(r.profit)) + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+
+    return html;
   }
 
   // =====================================================================
