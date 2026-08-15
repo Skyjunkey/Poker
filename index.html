@@ -407,7 +407,7 @@ textarea.input {
     document.getElementById('navRoot').innerHTML =
       '<button class="nav-btn ' + (onNights ? 'active' : '') + '" onclick="goNights()">🃏 ערבי פוקר</button>' +
       '<button class="nav-btn ' + (state.screen === 'players' ? 'active' : '') + '" onclick="goPlayers()">👥 שחקנים קבועים</button>' +
-      '<button class="nav-btn ' + (state.screen === 'stats' ? 'active' : '') + '" onclick="goStats()">🏆 סטטיסטיקות</button>';
+      '<button class="nav-btn ' + (state.screen === 'stats' ? 'active' : '') + '" onclick="goStats()">🏆 לוח שרופים</button>';
   }
 
   // =====================================================================
@@ -1450,7 +1450,7 @@ textarea.input {
   }
 
   // =====================================================================
-  // Screen: Statistics ("סטטיסטיקות")
+  // Screen: Statistics ("לוח שרופים")
   // Uses ONLY completed nights that have a saved settlement — everything
   // here is derived from that subset and never touches active nights or
   // completed-but-unsettled ones. Read-only; doesn't affect any other screen.
@@ -1523,7 +1523,7 @@ textarea.input {
   }
 
   function statsScreen() {
-    let html = '<h1 class="text-2xl font-bold mb-5">🏆 סטטיסטיקות</h1>';
+    let html = '<h1 class="text-2xl font-bold mb-5">🏆 לוח שרופים</h1>';
 
     if (!statsData) {
       html += '<p class="empty">טוען...</p>';
