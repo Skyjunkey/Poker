@@ -452,7 +452,7 @@ textarea.input {
           '<p class="font-semibold">' + esc(s.name) + '</p>' +
           '<div class="row gap-2">' +
             (isClosed ? '<span class="badge badge-green">✓ ערב סגור</span>' : '') +
-            (s.is_bounty_event ? '<span class="badge badge-red">בונטי</span>' : '') +
+            (s.is_bounty_event ? '<span class="badge badge-red">באונטי</span>' : '') +
           '</div>' +
         '</div>' +
         '<div class="row-between mt-2">' +
@@ -480,11 +480,11 @@ textarea.input {
       '<div class="field"><span class="field-label">קנייה ברירת מחדל (₪)</span><input id="nn-buyin" type="number" inputmode="decimal" class="input" value="100" /></div>' +
       '<div class="field"><span class="field-label">הערות</span><textarea id="nn-notes" class="input" rows="2" placeholder="הערות (אופציונלי)"></textarea></div>' +
       '<div class="row-between" style="background:rgba(0,0,0,0.2);border-radius:0.75rem;padding:0.6rem 0.75rem;margin-bottom:0.75rem">' +
-        '<span class="text-sm">ערב בונטי?</span>' +
+        '<span class="text-sm">ערב באונטי?</span>' +
         '<div id="nn-switch" class="switch" onclick="toggleNightBountySwitch()"><div class="knob"></div></div>' +
       '</div>' +
       '<div id="nn-bounty-field" style="display:none">' +
-        '<div class="field"><span class="field-label">סכום בונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="100" /></div>' +
+        '<div class="field"><span class="field-label">סכום באונטי לכל שחקן (₪)</span><input id="nn-bounty-amount" type="number" inputmode="decimal" class="input" value="100" /></div>' +
       '</div>' +
       '<button class="btn btn-primary" onclick="createNight()">יצירת ערב</button>';
     return modalShell('ערב פוקר חדש', body);
@@ -587,7 +587,7 @@ textarea.input {
       '<div class="grid-3 mb-5">' +
         statChip('שחקנים', String(totals.playerCount)) +
         gamePoolChip(totals) +
-        statChip('קופת בונטי', formatMoney(totals.bountyPool)) +
+        statChip('קופת באונטי', formatMoney(totals.bountyPool)) +
         statChip('מזומן', formatMoney(totals.totalCash)) +
         statChip('אשראי', formatMoney(totals.totalCredit)) +
         statChip('סה״כ', formatMoney(totals.grandTotal), true) +
@@ -602,14 +602,14 @@ textarea.input {
     if (session.is_bounty_event) {
       html += '<div class="card mb-5" style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3)">' +
         '<div class="row-between mb-2">' +
-          '<h2 class="font-semibold red">קופת בונטי</h2>' +
+          '<h2 class="font-semibold red">קופת באונטי</h2>' +
           '<button class="btn-sm" ' + (state.sessionPlayers.length === 0 ? 'disabled' : '') + ' onclick="openModal(\'bountyPrizes\')">' +
             (prizes.length > 0 ? 'ניהול פרסים' : 'הגדרת פרסים') +
           '</button>' +
         '</div>' +
         '<div class="' + (prizes.length > 0 ? 'grid-4' : 'grid-3') + ' text-sm muted mb-1">' +
           '<div><p class="text-xs muted-40">שחקנים</p><p class="tabular">' + totals.playerCount + '</p></div>' +
-          '<div><p class="text-xs muted-40">בונטי לשחקן</p><p class="tabular">' + formatMoney(session.bounty_amount) + '</p></div>' +
+          '<div><p class="text-xs muted-40">באונטי לשחקן</p><p class="tabular">' + formatMoney(session.bounty_amount) + '</p></div>' +
           '<div><p class="text-xs muted-40">סה"כ קופה</p><p class="tabular">' + formatMoney(totals.bountyPool) + '</p></div>' +
           (prizes.length > 0 ? '<div><p class="text-xs muted-40">יתרת קופה</p><p class="tabular font-semibold gold">' + formatMoney(bountyRemaining) + '</p></div>' : '') +
         '</div>';
@@ -623,7 +623,7 @@ textarea.input {
               '<span class="' + (winner ? 'gold font-semibold' : 'muted-40') + '">' + (winner ? esc(winner.display_name) : 'טרם חולק') + '</span>' +
             '</div>';
           }).join('') +
-          (prizesSum !== totals.bountyPool ? '<p class="text-xs red pt-1">⚠ סך הפרסים (' + formatMoney(prizesSum) + ') אינו שווה לקופת הבונטי (' + formatMoney(totals.bountyPool) + ')</p>' : '') +
+          (prizesSum !== totals.bountyPool ? '<p class="text-xs red pt-1">⚠ סך הפרסים (' + formatMoney(prizesSum) + ') אינו שווה לקופת הבאונטי (' + formatMoney(totals.bountyPool) + ')</p>' : '') +
         '</div>';
       }
       html += '</div>';
@@ -672,9 +672,9 @@ textarea.input {
     });
 
     html += '<div class="row-between divider-top pt-1 mt-1 font-semibold" style="color:var(--cream)"><span>סה״כ היום</span><span class="tabular">' + formatMoney(t.gameContribution) + '</span></div>';
-    if (isBounty) html += '<div class="row-between pt-1"><span>בונטי שולם</span><span class="tabular">' + formatMoney(t.bountyContribution) + '</span></div>';
+    if (isBounty) html += '<div class="row-between pt-1"><span>באונטי שולם</span><span class="tabular">' + formatMoney(t.bountyContribution) + '</span></div>';
     if (t.gamePayout > 0) html += '<div class="row-between gold"><span>קאשאאוט</span><span class="tabular">' + formatMoney(t.gamePayout) + '</span></div>';
-    if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה בונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
+    if (t.bountyPayout > 0) html += '<div class="row-between red"><span>זכייה באונטי</span><span class="tabular">' + formatMoney(t.bountyPayout) + '</span></div>';
     html += '</div>';
 
     const confirmingRemove = confirmRemovePlayerIds.has(sp.id);
@@ -710,7 +710,7 @@ textarea.input {
         p.assigned_session_player_id === id ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p
       );
       session.bounty_prizes = cleaned;
-      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי בונטי');
+      checkError(await sb.from('poker_sessions').update({ bounty_prizes: cleaned }).eq('id', session.id), 'עדכון פרסי באונטי');
     }
   }
 
@@ -736,8 +736,8 @@ textarea.input {
         '</div><input type="hidden" id="ap-buyin-method" value="cash" />' +
       '</div>' +
       (session.is_bounty_event ?
-        '<div class="field"><span class="field-label">סכום בונטי (₪)</span><input id="ap-bounty" type="number" inputmode="decimal" class="input" value="' + session.bounty_amount + '" /></div>' +
-        '<div class="field"><span class="field-label">אמצעי תשלום לבונטי</span>' +
+        '<div class="field"><span class="field-label">סכום באונטי (₪)</span><input id="ap-bounty" type="number" inputmode="decimal" class="input" value="' + session.bounty_amount + '" /></div>' +
+        '<div class="field"><span class="field-label">אמצעי תשלום לבאונטי</span>' +
           '<div class="toggle-group">' +
             '<button class="toggle-btn active" data-method="cash" onclick="setToggle(this,\'ap-bounty-method\')">מזומן</button>' +
             '<button class="toggle-btn" data-method="credit_card" onclick="setToggle(this,\'ap-bounty-method\')">אשראי</button>' +
@@ -833,8 +833,8 @@ textarea.input {
 
   // ---- Transactions list (void/restore) ----
   const TYPE_LABELS = {
-    initial_buy_in: 'קנייה ראשונית', rebuy: 'ריביי', bounty_contribution: 'תשלום בונטי',
-    game_payout: 'קאשאאוט', bounty_payout: 'זכיית בונטי', adjustment: 'התאמה',
+    initial_buy_in: 'קנייה ראשונית', rebuy: 'ריביי', bounty_contribution: 'תשלום באונטי',
+    game_payout: 'קאשאאוט', bounty_payout: 'זכיית באונטי', adjustment: 'התאמה',
   };
   function transactionsModal(sessionPlayerId) {
     const sp = state.sessionPlayers.find((s) => s.id === sessionPlayerId);
@@ -845,7 +845,7 @@ textarea.input {
         '<div class="assign-row" style="' + (t.is_voided ? 'opacity:0.4' : '') + '">' +
           '<div class="row-between">' +
             '<div><p class="text-sm font-semibold">' + (TYPE_LABELS[t.transaction_type] || t.transaction_type) + (t.is_voided ? ' <span class="red text-xs">(מבוטל)</span>' : '') + '</p>' +
-              '<p class="text-xs muted">' + fmtDateTime(t.created_at) + ' · ' + (t.payment_method === 'cash' ? 'מזומן' : 'אשראי') + ' · ' + (t.pool_type === 'game' ? 'קופת משחק' : 'קופת בונטי') + '</p>' +
+              '<p class="text-xs muted">' + fmtDateTime(t.created_at) + ' · ' + (t.payment_method === 'cash' ? 'מזומן' : 'אשראי') + ' · ' + (t.pool_type === 'game' ? 'קופת משחק' : 'קופת באונטי') + '</p>' +
               (t.notes ? '<p class="text-xs muted">' + esc(t.notes) + '</p>' : '') +
             '</div>' +
             '<div class="row gap-2"><span class="tabular font-semibold">' + formatMoney(t.amount) + '</span>' +
@@ -896,14 +896,14 @@ textarea.input {
       const fallback = n > 0 ? Math.round(totals.bountyPool / n) : 0;
       const draft = Array.from({ length: n }, () => fallback || session.bounty_amount);
       const body =
-        '<p class="text-sm muted mb-3">' + n + ' שחקנים → ' + n + ' פרסים להגדרה · קופת בונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · נותר לחלק: <span id="bp-remaining" class="font-semibold">' + formatMoney(totals.bountyPool - draft.reduce((a, b) => a + b, 0)) + '</span></p>' +
+        '<p class="text-sm muted mb-3">' + n + ' שחקנים → ' + n + ' פרסים להגדרה · קופת באונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · נותר לחלק: <span id="bp-remaining" class="font-semibold">' + formatMoney(totals.bountyPool - draft.reduce((a, b) => a + b, 0)) + '</span></p>' +
         '<button class="btn btn-secondary mb-3" style="width:100%" onclick="autoDistributeClick(' + totals.bountyPool + ')">🎲 חלוקה אוטומטית</button>' +
         '<div class="card-list mb-3" style="max-height:18rem;overflow-y:auto">' +
           draft.map((a, i) => '<div class="row gap-2"><span class="text-sm muted" style="width:4rem;flex-shrink:0">פרס ' + (i + 1) + '</span><input class="input bp-draft-input" data-idx="' + i + '" type="number" inputmode="decimal" value="' + a + '" oninput="updateBpRemaining(' + totals.bountyPool + ')" /></div>').join('') +
         '</div>' +
         '<p id="bp-overage-msg" class="text-xs red mb-3" style="display:none"></p>' +
         '<button id="bp-create-btn" class="btn btn-primary" onclick="createPrizes()">יצירת פרסים</button>';
-      return modalShell('פרסי בונטי', body);
+      return modalShell('פרסי באונטי', body);
     }
 
     const availablePlayers = state.sessionPlayers.slice();
@@ -912,8 +912,8 @@ textarea.input {
 
     const remainingToDefine = Math.round((totals.bountyPool - sum) * 100) / 100;
 
-    let body = '<p class="text-sm muted mb-2">קופת בונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · הוגדר: <span class="font-semibold">' + formatMoney(sum) + '</span> · נותר לחלק: <span class="font-semibold ' + (remainingToDefine === 0 ? 'gold' : 'red') + '">' + formatMoney(Math.abs(remainingToDefine)) + '</span></p>' +
-      '<p class="text-xs muted mb-3">שחקן יכול לקבל יותר מפרס בונטי אחד באותו ערב.</p>' +
+    let body = '<p class="text-sm muted mb-2">קופת באונטי: <span class="gold font-semibold">' + formatMoney(totals.bountyPool) + '</span> · הוגדר: <span class="font-semibold">' + formatMoney(sum) + '</span> · נותר לחלק: <span class="font-semibold ' + (remainingToDefine === 0 ? 'gold' : 'red') + '">' + formatMoney(Math.abs(remainingToDefine)) + '</span></p>' +
+      '<p class="text-xs muted mb-3">שחקן יכול לקבל יותר מפרס באונטי אחד באותו ערב.</p>' +
       '<div class="card-list mb-3" style="max-height:24rem;overflow-y:auto">';
 
     body += prizes.map((p, i) => {
@@ -931,9 +931,9 @@ textarea.input {
     }).join('');
 
     body += '</div>';
-    if (!isEqual) body += '<p class="text-xs red mb-3">סך הפרסים (' + formatMoney(sum) + ') אינו שווה לקופת הבונטי (' + formatMoney(totals.bountyPool) + ')</p>';
+    if (!isEqual) body += '<p class="text-xs red mb-3">סך הפרסים (' + formatMoney(sum) + ') אינו שווה לקופת הבאונטי (' + formatMoney(totals.bountyPool) + ')</p>';
     body += '<button class="link" style="width:100%;text-align:center;padding:0.25rem" onclick="resetPrizes()">איפוס והגדרה מחדש של כל הפרסים</button>';
-    return modalShell('פרסי בונטי', body);
+    return modalShell('פרסי באונטי', body);
   }
 
   function updateBpRemaining(pool) {
@@ -959,11 +959,11 @@ textarea.input {
 
     if (hasZeroOrNegative) {
       msg.style.display = 'block';
-      msg.textContent = 'כל פרס בונטי חייב להיות גדול מ-₪0.';
+      msg.textContent = 'כל פרס באונטי חייב להיות גדול מ-₪0.';
       btn.disabled = true;
     } else if (remaining < 0) {
       msg.style.display = 'block';
-      msg.textContent = 'חריגה מקופת הבונטי — יש להקטין את הפרסים ב-' + formatMoney(-remaining) + ' כדי לשמור';
+      msg.textContent = 'חריגה מקופת הבאונטי — יש להקטין את הפרסים ב-' + formatMoney(-remaining) + ' כדי לשמור';
       btn.disabled = true;
     } else if (remaining > 0) {
       msg.style.display = 'block';
@@ -1004,7 +1004,7 @@ textarea.input {
     }
 
     if (amounts.some((amount) => amount <= 0)) {
-      alert('כל פרס בונטי חייב להיות גדול מ-₪0.');
+      alert('כל פרס באונטי חייב להיות גדול מ-₪0.');
       return;
     }
 
@@ -1012,7 +1012,7 @@ textarea.input {
     const pool = Math.round(totals.bountyPool * 100) / 100;
 
     if (Math.abs(sum - pool) > 0.005) {
-      alert('סך הפרסים חייב להיות שווה בדיוק לקופת הבונטי. נותר לחלק: ' + formatMoney(Math.abs(pool - sum)));
+      alert('סך הפרסים חייב להיות שווה בדיוק לקופת הבאונטי. נותר לחלק: ' + formatMoney(Math.abs(pool - sum)));
       return;
     }
 
@@ -1054,7 +1054,7 @@ textarea.input {
     const session = state.activeSession;
     const prize = (session.bounty_prizes || []).find((p) => p.id === prizeId);
     if (!prize || Number(prize.amount) <= 0) {
-      alert('לא ניתן לחלק פרס בונטי בסכום ₪0.');
+      alert('לא ניתן לחלק פרס באונטי בסכום ₪0.');
       return;
     }
     const { data, error } = await sb.from('transactions').insert({
@@ -1072,7 +1072,7 @@ textarea.input {
     const session = state.activeSession;
     const prize = (session.bounty_prizes || []).find((p) => p.id === prizeId);
     if (prize && prize.payout_transaction_id) {
-      checkError(await sb.from('transactions').update({ is_voided: true }).eq('id', prize.payout_transaction_id), 'ביטול תשלום בונטי');
+      checkError(await sb.from('transactions').update({ is_voided: true }).eq('id', prize.payout_transaction_id), 'ביטול תשלום באונטי');
     }
     const nextPrizes = session.bounty_prizes.map((p) => p.id === prizeId ? Object.assign({}, p, { assigned_session_player_id: null, payout_transaction_id: null }) : p);
     checkError(await sb.from('poker_sessions').update({ bounty_prizes: nextPrizes }).eq('id', session.id), 'ביטול שיוך פרס');
@@ -1084,7 +1084,7 @@ textarea.input {
     const session = state.activeSession;
     const hadAssigned = (session.bounty_prizes || []).some((p) => p.assigned_session_player_id);
     if (hadAssigned) {
-      checkError(await sb.from('transactions').update({ is_voided: true }).eq('session_id', session.id).eq('transaction_type', 'bounty_payout'), 'איפוס תשלומי בונטי');
+      checkError(await sb.from('transactions').update({ is_voided: true }).eq('session_id', session.id).eq('transaction_type', 'bounty_payout'), 'איפוס תשלומי באונטי');
     }
     checkError(await sb.from('poker_sessions').update({ bounty_prizes: [] }).eq('id', session.id), 'איפוס פרסים');
     state.activeSession.bounty_prizes = [];
@@ -1240,7 +1240,7 @@ textarea.input {
     const totals = computeSessionTotals(state.sessionPlayers, state.transactions);
     const mainPot = totals.gamePool;
     const body =
-      '<p class="text-sm muted mb-3">קופה ראשית: <span class="gold font-semibold">' + formatMoney(mainPot) + '</span> (בונטי לא נכלל)</p>' +
+      '<p class="text-sm muted mb-3">קופה ראשית: <span class="gold font-semibold">' + formatMoney(mainPot) + '</span> (באונטי לא נכלל)</p>' +
       '<div class="card-list mb-3">' +
         settlementDraft.finalistIds.map((id) => {
           const sp = state.sessionPlayers.find((s) => s.id === id);
